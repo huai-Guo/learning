@@ -131,8 +131,8 @@ IP
 5. [HTTP / HTTPS / TLS：业务语义、证书与安全握手](./05-http-https-tls.md) · [HTML 视觉版](./05-http-https-tls.html)  
    HTTP Request/Response、Host/:authority、Cookie/Session、缓存、TLS 1.2/1.3、ECDHE、HKDF、数字签名、证书链、SNI、ALPN、Session Resumption、0-RTT。
 
-6. 06-modern-protocols.md  
-   HTTP/2、HTTP/3、QUIC、WebSocket、RPC。
+6. [HTTP/2、HTTP/3、QUIC、WebSocket、RPC](./06-modern-protocols.md) · [HTML 视觉版](./06-modern-protocols.html)  
+   Binary Frame、Stream/Multiplexing、TCP HOL、QUIC Packet/Stream、Connection ID、QPACK、WebSocket、gRPC/Thrift、Deadline/Retry、服务发现与负载均衡。
 
 7. 07-backend-network-topology.md  
    CDN / WAF / L4-L7 LB / Nginx / Gateway / RPC / Redis / MySQL。
