@@ -1,118 +1,239 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>06 · HTTP/2、HTTP/3、QUIC、WebSocket、RPC</title>
-<style>
-:root{--bg:#f6f9fc;--card:#fff;--ink:#102647;--muted:#61748c;--line:#d9e4f0;--blue:#2f68ef;--b:#eef4ff;--g:#edf9f2;--o:#fff4e8;--p:#f4efff;--r:#fff0f0;--dark:#10182d}
-*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#edf5fc,#fff);font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--ink)}main{max-width:1180px;margin:auto;padding:30px 22px 80px}
-.hero{background:#fff;border:1px solid var(--line);border-radius:28px;padding:32px;box-shadow:0 16px 48px rgba(35,66,110,.08)}
-h1{font-size:40px;margin:0 0 10px}h2{font-size:28px;margin:42px 0 16px}h3{font-size:18px;margin:0 0 10px}.sub{font-size:18px;line-height:1.75;color:var(--muted)}
-.note{margin-top:18px;background:var(--dark);color:#fff;padding:15px 17px;border-radius:15px;line-height:1.65}.nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.nav a{color:#225dce;text-decoration:none;border:1px solid #c7d7e8;padding:9px 12px;border-radius:11px;background:#fff;font-weight:600}
-.grid2,.grid3,.grid4{display:grid;gap:14px}.grid2{grid-template-columns:repeat(2,1fr)}.grid3{grid-template-columns:repeat(3,1fr)}.grid4{grid-template-columns:repeat(4,1fr)}
-.card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:18px}.card p{color:var(--muted);line-height:1.65;margin:6px 0 0}.tag{display:inline-block;font-size:12px;padding:4px 8px;border-radius:999px;background:#eaf2ff;color:#245bcc;margin-bottom:8px}
-.flow{display:flex;flex-direction:column;align-items:center;gap:8px}.step{width:min(820px,100%);padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:#fff;text-align:center;font-weight:700}.blue{background:var(--b)}.green{background:var(--g)}.orange{background:var(--o)}.purple{background:var(--p)}.red{background:var(--r)}.arrow{color:var(--blue);font-weight:900}
-.packet{background:#0f182d;color:#dbe6ff;border-radius:18px;padding:20px;font-family:Consolas,monospace;white-space:pre-wrap;line-height:1.7;overflow:auto}
-.table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden}.table th,.table td{padding:12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.table th{background:#f3f7fc}
-footer{text-align:center;color:var(--muted);font-size:13px;margin-top:40px}
-@media(max-width:900px){.grid2,.grid3,.grid4{grid-template-columns:1fr}h1{font-size:31px}}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>06｜HTTP/2、HTTP/3、QUIC、WebSocket、RPC</title>
+  <link rel="stylesheet" href="./assets/course.css">
 </head>
-<body><main>
-<section class="hero">
-<span class="tag">Phase 6</span>
-<h1>HTTP/2、HTTP/3、QUIC、WebSocket、RPC</h1>
-<p class="sub">这章不是“协议大杂烩”，而是一条演化链：HTTP/1.1 的并发问题 → HTTP/2 Stream 多路复用 → TCP 层 HOL → QUIC 独立 Stream → HTTP/3；再把 WebSocket 和 RPC 放到正确层级。</p>
-<div class="note"><b>总原则：</b>HTTP/2、HTTP/3 是 HTTP 演进；WebSocket 是双向消息协议；RPC 是远程调用编程模型。它们不在同一层，不能机械横向比较。</div>
-<div class="nav"><a href="./README.md">总目录</a><a href="./06-modern-protocols.md">完整 Markdown</a><a href="./05-http-https-tls.html">上一章</a><a href="./PLAN.md">计划</a></div>
-</section>
+<body>
+<div class="page">
+  <aside class="toc">
+    <h2>06 · 现代协议</h2>
+    <p>从 HTTP/1.1 的限制出发，沿着 HTTP/2 → TCP HOL → QUIC → HTTP/3，再把 WebSocket 与 RPC 放回正确层次。</p>
+    <a href="#hero">0. 学习目标</a>
+    <a href="#h2">1. HTTP/2 为什么出现</a>
+    <a href="#hol">2. TCP HOL</a>
+    <a href="#quic">3. QUIC 为什么选 UDP</a>
+    <a href="#stream">4. Packet / Stream / Migration</a>
+    <a href="#h3">5. HTTP/3 / QPACK</a>
+    <a href="#ws">6. WebSocket</a>
+    <a href="#rpc">7. RPC / gRPC / Thrift</a>
+    <a href="#reliability">8. Deadline / Retry</a>
+    <a href="#discovery">9. Discovery / LB</a>
+    <a href="#summary">10. 一页总结</a>
+  </aside>
 
-<h2>1 · HTTP 演进主线</h2>
-<div class="flow">
-<div class="step blue">HTTP/1.1<br>Persistent Connection，但并发受限</div><div class="arrow">↓</div>
-<div class="step green">HTTP/2<br>Binary Frame + Stream + Multiplexing + HPACK</div><div class="arrow">↓</div>
-<div class="step red">仍在一条 TCP Byte Stream 上<br>TCP Loss → Connection-level HOL</div><div class="arrow">↓</div>
-<div class="step orange">QUIC<br>独立 Streams + ACK/Loss Recovery + Flow/Congestion Control + TLS 1.3 + CID</div><div class="arrow">↓</div>
-<div class="step purple">HTTP/3<br>HTTP Semantics over QUIC</div>
-</div>
+  <main class="content">
+    <section class="hero" id="hero">
+      <span class="badge">Chapter 06 · Modern Protocols</span>
+      <h1>HTTP/2、HTTP/3、QUIC、WebSocket、RPC：<br>现代协议到底在解决什么问题？</h1>
+      <p class="lead">不要把这些协议背成一张名单。正确的学习方式是沿着因果链：<b>HTTP/1.1 并发不够 → HTTP/2 用 Frame + Stream 多路复用 → 底层 TCP 仍有全局有序阻塞 → QUIC 重做传输能力 → HTTP/3 建在 QUIC 上</b>。WebSocket 和 RPC 则属于另外两类需求。</p>
+      <div class="hero-grid">
+        <div class="mini-card">
+          <h3>版本演进主线</h3>
+          <ul>
+            <li>HTTP/1.1：Persistent Connection，但并发能力有限。</li>
+            <li>HTTP/2：Binary Frame、Stream、Multiplexing、HPACK。</li>
+            <li>HTTP/3：HTTP Semantics over QUIC。</li>
+          </ul>
+        </div>
+        <div class="mini-card">
+          <h3>两条旁支</h3>
+          <ul>
+            <li>WebSocket：长期双向消息通道。</li>
+            <li>RPC：把远程通信包装成方法调用。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="top-links"><a href="./05-http-https-tls.html">上一章</a><a href="./06-modern-protocols.md">完整 Markdown</a><a href="./07-backend-network-topology.html">下一章</a></div>
+    </section>
 
-<h2>2 · HTTP/2 的 Connection / Stream / Message / Frame</h2>
-<div class="packet">HTTP/2 Connection
+    <section class="section" id="h2">
+      <span class="eyebrow">HTTP/2</span>
+      <h2>1. HTTP/2 为什么要引入 Binary Frame 与 Stream？</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag red">HTTP/1.1 的痛点</span>
+          <div class="codebox">多个资源
+ ↓
+常需要多条 TCP connections
+ ↓
+更多握手
+更多 Socket
+多套拥塞控制
+Header 重复</div>
+          <p>HTTP pipelining 长期没有成为浏览器主流并发方案。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag green">HTTP/2 的答案</span>
+          <div class="codebox">One TCP Connection
+   │
+   ├─ Stream 1
+   │   ├─ HEADERS
+   │   └─ DATA
+   │
+   ├─ Stream 3
+   │   ├─ HEADERS
+   │   └─ DATA
+   │
+   └─ Stream 5</div>
+          <p>不同 Stream 的 Frame 可以交错，接收端根据 Stream ID 重新归类。</p>
+        </div>
+      </div>
+      <div class="grid-4" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">Connection</span><p>一条 HTTP/2 底层连接。</p></div>
+        <div class="grid-card"><span class="tag green">Stream</span><p>Connection 内的逻辑双向流。</p></div>
+        <div class="grid-card"><span class="tag orange">Message</span><p>一个 HTTP Request 或 Response。</p></div>
+        <div class="grid-card"><span class="tag purple">Frame</span><p>HTTP/2 在线上传输的协议单位。</p></div>
+      </div>
+      <div class="callout"><div class="icon">i</div><div><strong>HPACK 为什么存在？</strong><div>Header 很容易重复。HPACK 用 Static Table、Dynamic Table 与 Huffman Coding 减少重复传输，但这也引入了双方压缩状态同步。</div></div></div>
+    </section>
+
+    <section class="section" id="hol">
+      <span class="eyebrow">真正的瓶颈下沉到 TCP</span>
+      <h2>2. HTTP/2 已经多路复用，为什么还会有 TCP-level HOL？</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag green">HTTP/2 Layer</span>
+          <p>Stream 1 慢，不代表 HTTP 层必须暂停 Stream 3 / 5 的 Frame。应用层并发已经显著改善。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag red">TCP Layer</span>
+          <p>多个 Stream 最终仍被编码进同一条 TCP Byte Stream，而 TCP 必须有序交付。</p>
+        </div>
+      </div>
+      <div class="codebox" style="margin-top:14px">TCP bytes 1...1000      ✓
+TCP bytes 1001...2000   X lost
+TCP bytes 2001...3000   ✓ arrived
+
+TCP 必须等待中间缺口
+ ↓
+后续字节暂时不能交给 HTTP/2 parser
+ ↓
+不同 HTTP/2 Streams 也可能一起被拖住</div>
+      <div class="callout"><div class="icon">!</div><div><strong>所以“HTTP/2 解决了 HOL”只说对了一半</strong><div>它解决了很多 HTTP 层串行限制，但没有消灭 TCP 自己的全局有序 Byte Stream 阻塞。</div></div></div>
+    </section>
+
+    <section class="section" id="quic">
+      <span class="eyebrow">QUIC</span>
+      <h2>3. QUIC 为什么选择 UDP 作为底层接口？</h2>
+      <div class="grid-3">
+        <div class="grid-card"><span class="tag red">不是为了“不可靠”</span><p>UDP 只提供最小 Datagram 接口，QUIC 自己重新实现可靠性。</p></div>
+        <div class="grid-card"><span class="tag blue">更容易部署</span><p>QUIC 常在用户态实现，新算法不必等待 OS Kernel TCP 全面升级。</p></div>
+        <div class="grid-card"><span class="tag green">重做 Stream 模型</span><p>每条 Stream 独立维护有序性，避免一条全局 Byte Stream 把所有逻辑流绑在一起。</p></div>
+      </div>
+      <div class="codebox" style="margin-top:14px">HTTP/3
+ ↓
+QUIC
+ ↓
+UDP
+ ↓
+IP
+
+QUIC 自己负责：
+ACK
+Loss Recovery
+Reliable Streams
+Flow Control
+Congestion Control
+TLS 1.3 Integration
+Connection ID</div>
+      <div class="callout"><div class="icon">i</div><div><strong>用户态实现 ≠ 普通应用协议</strong><div>从职责上，QUIC 承担了大量传统 Transport Protocol 的工作，只是其实现位置通常比 TCP 更靠近应用进程。</div></div></div>
+    </section>
+
+    <section class="section" id="stream">
+      <span class="eyebrow">QUIC 数据模型</span>
+      <h2>4. Packet Number、Stream Offset、Connection ID 分别解决什么？</h2>
+      <div class="grid-3">
+        <div class="grid-card">
+          <span class="tag blue">Packet Number</span>
+          <p>用于 ACK、Loss Detection、RTT 等 Packet-level recovery。重发相关可靠信息时使用新的 Packet Number。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag green">Stream ID + Offset</span>
+          <p>描述某条 Stream 的数据位置，负责 Stream-level reassembly 与有序交付。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag purple">Connection ID</span>
+          <p>让 QUIC Connection Identity 不完全依赖 IP:Port 四元组，为网络迁移提供基础。</p>
+        </div>
+      </div>
+      <div class="codebox" style="margin-top:14px">QUIC Connection
 ├─ Stream 1
-│  ├─ Request Message
-│  │  └─ HEADERS / DATA Frames
-│  └─ Response Message
-│     └─ HEADERS / DATA Frames
+│   └─ offset 1000~1499 lost → 等自己恢复
 ├─ Stream 3
+│   └─ data complete → 继续交给 HTTP/3
 └─ Stream 5
+    └─ data complete → 继续交给 HTTP/3</div>
+      <div class="callout"><div class="icon">!</div><div><strong>QUIC 不是“完全没有 HOL”</strong><div>同一个 Stream 内仍然有自己的顺序要求。它解决的是“一条 Stream 的丢包不会因为全局有序 Byte Stream 而阻塞其他独立 Stream”。</div></div></div>
 
-不同 Stream 的 Frame 可以交错发送；
-Stream ID 让接收端重新归类。</div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card">
+          <span class="tag orange">Connection Migration</span>
+          <div class="codebox">5G → Wi-Fi
+ ↓
+src IP / port changes
+ ↓
+CID still identifies connection
+ ↓
+Path Validation
+ ↓
+update path / congestion state
+ ↓
+continue</div>
+        </div>
+        <div class="grid-card">
+          <span class="tag red">不要过度简化</span>
+          <p>Connection ID 不替代 IP/UDP 寻址；新路径仍需 Path Validation，避免地址欺骗与放大攻击。</p>
+        </div>
+      </div>
+    </section>
 
-<h2>3 · Multiplexing 为什么还会被 TCP 拖住？</h2>
-<div class="grid2">
-<div class="card green"><span class="tag">HTTP/2 Layer</span><h3>Stream 可以并发</h3><p>Stream 1 慢，不要求 HTTP 层停止发送 Stream 3/5 的 Frame。</p></div>
-<div class="card red"><span class="tag">TCP Layer</span><h3>仍是一条全局有序 Byte Stream</h3><p>低序号 TCP 数据缺失时，后面已经到达的字节也不能及时交给 HTTP/2 Parser。</p></div>
-</div>
+    <section class="section" id="h3">
+      <span class="eyebrow">HTTP/3</span>
+      <h2>5. HTTP/3：不是“HTTP/2 + UDP”，而是 HTTP Semantics over QUIC</h2>
+      <div class="grid-3">
+        <div class="grid-card"><span class="tag blue">HTTP/1.1</span><div class="codebox">HTTP/1.1
+ ↓
+TLS
+ ↓
+TCP
+ ↓
+IP</div></div>
+        <div class="grid-card"><span class="tag green">HTTP/2</span><div class="codebox">HTTP/2
+ ↓
+TLS
+ ↓
+TCP
+ ↓
+IP</div></div>
+        <div class="grid-card"><span class="tag purple">HTTP/3</span><div class="codebox">HTTP/3
+ ↓
+QUIC + TLS 1.3 integration
+ ↓
+UDP
+ ↓
+IP</div></div>
+      </div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card"><span class="tag orange">QPACK</span><p>为 QUIC 多 Stream 独立交付设计 Header Compression，避免直接照搬 HPACK 时重新制造压缩状态阻塞。</p></div>
+        <div class="grid-card"><span class="tag blue">TLS 1.3 Integration</span><p>QUIC Transport Handshake 与 TLS 1.3 协同进行，不是简单把“TCP 上的 TLS Record”原样套在 UDP 之上。</p></div>
+      </div>
+      <div class="callout"><div class="icon">i</div><div><strong>HTTP/3 也不等于“永远 0-RTT”</strong><div>新连接通常仍需要约 1 RTT；已有恢复状态时才可能使用 0-RTT Early Data，而且同样有 Replay Risk。</div></div></div>
+    </section>
 
-<h2>4 · QUIC 为什么选 UDP？</h2>
-<div class="grid3">
-<div class="card"><b>不是为了“不可靠”</b><p>UDP 只提供最小 Datagram 接口；可靠性由 QUIC 自己实现。</p></div>
-<div class="card"><b>更容易部署新传输逻辑</b><p>QUIC 常在用户态迭代，不必等待内核 TCP 全面升级。</p></div>
-<div class="card"><b>重做 Stream 模型</b><p>不同 Stream 独立可靠交付，不再共享一条全局有序 Byte Stream。</p></div>
-</div>
+    <section class="section" id="ws">
+      <span class="eyebrow">双向消息</span>
+      <h2>6. WebSocket：解决的是长期 Full-Duplex 通信，不是“HTTP 太慢”</h2>
+      <div class="grid-3">
+        <div class="grid-card"><span class="tag blue">Polling</span><p>客户端反复问“有新消息吗？”，简单但产生很多空请求。</p></div>
+        <div class="grid-card"><span class="tag orange">Long Polling</span><p>Server 暂时挂住 Request，有事件或超时后再返回，然后 Client 继续下一轮。</p></div>
+        <div class="grid-card"><span class="tag green">WebSocket</span><p>建立长期双向 Message Channel，Client 与 Server 都可以主动发送消息。</p></div>
+      </div>
+      <div class="codebox" style="margin-top:14px">经典 HTTP/1.1 Upgrade：
 
-<h2>5 · Packet Number 与 Stream Offset</h2>
-<table class="table">
-<tr><th>概念</th><th>解决什么</th></tr>
-<tr><td>Packet Number</td><td>QUIC Packet 的 ACK、Loss Detection、RTT 等；重传相关信息会进入新的 Packet Number。</td></tr>
-<tr><td>Stream ID</td><td>区分是哪一条逻辑 Stream。</td></tr>
-<tr><td>Stream Offset</td><td>描述该 Stream 内数据的字节位置，用于重组与有序交付。</td></tr>
-</table>
-
-<h2>6 · QUIC 避免跨 Stream HOL</h2>
-<div class="packet">QUIC Connection
-├─ Stream 1: offset 1000~1499 丢失 → 等自己恢复
-├─ Stream 3: 数据完整 → 继续交给 HTTP/3
-└─ Stream 5: 数据完整 → 继续交给 HTTP/3
-
-注意：
-同一个 Stream 内仍有自己的顺序要求。</div>
-
-<h2>7 · QUIC 仍然要做“TCP 那些难活”</h2>
-<div class="grid4">
-<div class="card"><b>Reliability</b><p>ACK、Loss Detection、Reliable Frames。</p></div>
-<div class="card"><b>Flow Control</b><p>Stream-level + Connection-level。</p></div>
-<div class="card"><b>Congestion Control</b><p>根据 ACK、RTT、Loss、ECN 调整发送。</p></div>
-<div class="card"><b>Security</b><p>把 TLS 1.3 Handshake 集成进 QUIC。</p></div>
-</div>
-
-<h2>8 · Connection ID 与网络迁移</h2>
-<div class="flow">
-<div class="step blue">手机 5G → Wi-Fi</div><div class="arrow">↓</div>
-<div class="step orange">src IP / port 可能变化</div><div class="arrow">↓</div>
-<div class="step purple">Connection ID 仍关联原 QUIC Connection</div><div class="arrow">↓</div>
-<div class="step green">Path Validation</div><div class="arrow">↓</div>
-<div class="step green">继续 Connection</div>
-</div>
-
-<h2>9 · HTTP/3 栈</h2>
-<div class="grid3">
-<div class="card"><span class="tag">HTTP/1.1</span><h3>HTTP → TLS → TCP → IP</h3><p>文本协议 framing + TCP。</p></div>
-<div class="card"><span class="tag">HTTP/2</span><h3>HTTP/2 → TLS → TCP → IP</h3><p>Frame/Stream 多路复用，但仍有 TCP HOL。</p></div>
-<div class="card"><span class="tag">HTTP/3</span><h3>HTTP/3 → QUIC → UDP → IP</h3><p>直接使用 QUIC Streams，Header Compression 使用 QPACK。</p></div>
-</div>
-
-<h2>10 · WebSocket 是什么？</h2>
-<div class="grid3">
-<div class="card"><b>Polling</b><p>客户端不断问“有新消息吗？”</p></div>
-<div class="card"><b>Long Polling</b><p>一次 HTTP Request 挂起较久，有事件再 Response，然后继续下一轮。</p></div>
-<div class="card green"><b>WebSocket</b><p>建立长期 Full-Duplex Message Channel，双方可主动发送消息。</p></div>
-</div>
-
-<h2>11 · 经典 WebSocket Upgrade</h2>
-<div class="packet">Client:
+Client:
 GET /chat HTTP/1.1
 Upgrade: websocket
 Connection: Upgrade
@@ -122,71 +243,163 @@ Server:
 HTTP/1.1 101 Switching Protocols
 Upgrade: websocket
 Connection: Upgrade
-Sec-WebSocket-Accept: ...
 
 之后：
-WebSocket Frames / Messages
-而不是普通 HTTP Request / Response。</div>
+WebSocket Frames / Messages</div>
+      <div class="grid-3" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">TCP Keepalive</span><p>Kernel TCP 层探测连接可达性。</p></div>
+        <div class="grid-card"><span class="tag green">WebSocket Ping/Pong</span><p>WebSocket Protocol 层确认 Peer 还在正常处理协议。</p></div>
+        <div class="grid-card"><span class="tag purple">Business Heartbeat</span><p>业务层确认 Session、Room、Game State 等是否健康。</p></div>
+      </div>
+    </section>
 
-<h2>12 · 三种“保活/心跳”仍要分层</h2>
-<table class="table">
-<tr><th>机制</th><th>层次</th><th>关心的问题</th></tr>
-<tr><td>TCP Keepalive</td><td>Kernel TCP</td><td>连接路径是否仍可达</td></tr>
-<tr><td>WebSocket Ping/Pong</td><td>WebSocket Protocol</td><td>WebSocket Peer 是否正常响应</td></tr>
-<tr><td>Application Heartbeat</td><td>业务层</td><td>用户 Session / 房间 / 游戏状态是否健康</td></tr>
-</table>
+    <section class="section" id="rpc">
+      <span class="eyebrow">远程调用抽象</span>
+      <h2>7. RPC：不是一种固定网络协议，而是一种“远程方法调用”模型</h2>
+      <div class="flow">
+        <div class="step">userService.getUser(42)</div>
+        <div class="arrow">↓</div>
+        <div class="step">Client Stub / IDL</div>
+        <div class="arrow">↓</div>
+        <div class="step">Serialization</div>
+        <div class="arrow">↓</div>
+        <div class="step">RPC Protocol / Metadata / Deadline</div>
+        <div class="arrow">↓</div>
+        <div class="step">HTTP/2 / TCP / QUIC / Other Transport</div>
+        <div class="arrow">↓</div>
+        <div class="step">Server Stub → Business Method</div>
+      </div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card">
+          <span class="tag blue">gRPC</span>
+          <div class="codebox">Application Method
+ ↓
+gRPC
+ ↓
+Protocol Buffers
+ ↓
+HTTP/2
+ ↓
+TLS
+ ↓
+TCP</div>
+          <p>gRPC 不等于 HTTP/2；HTTP/2 只是它常用的底层传输协议之一。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag orange">Thrift</span>
+          <div class="codebox">Thrift IDL
+ ↓
+Generated Code
+ ↓
+Protocol
+Binary / Compact
+ ↓
+Transport</div>
+          <p>Thrift 是 IDL + Codegen + Protocol + Transport 的 RPC 工具链，不应和 TCP 当成同层方案比较。</p>
+        </div>
+      </div>
+      <div class="callout"><div class="icon">!</div><div><strong>REST = HTTP，RPC = TCP 是错误的</strong><div>RPC 可以跑在 HTTP/2、TCP、QUIC、WebSocket 等不同通道上；HTTP JSON API 也可能设计得很 RPC 风格。</div></div></div>
+    </section>
 
-<h2>13 · RPC 不等于一种协议</h2>
-<div class="flow">
-<div class="step blue">userService.getUser(42)</div><div class="arrow">↓</div>
-<div class="step blue">Client Stub / IDL</div><div class="arrow">↓</div>
-<div class="step orange">Serialization</div><div class="arrow">↓</div>
-<div class="step orange">RPC Protocol / Metadata / Deadline</div><div class="arrow">↓</div>
-<div class="step purple">HTTP/2 / TCP / QUIC / Other Transport</div><div class="arrow">↓</div>
-<div class="step green">Server Stub → Business Method</div>
+    <section class="section" id="reliability">
+      <span class="eyebrow">工程可靠性</span>
+      <h2>8. Deadline / Cancellation / Retry：RPC 真正难的不是“把请求发过去”</h2>
+      <div class="grid-3">
+        <div class="grid-card"><span class="tag blue">Deadline</span><p>传播整个调用链剩余时间预算，避免下游无限等待。</p></div>
+        <div class="grid-card"><span class="tag orange">Cancellation</span><p>上游已经不需要结果时，尽量让下游停止无意义工作并释放资源。</p></div>
+        <div class="grid-card"><span class="tag red">Retry</span><p>Timeout 不代表远端没执行。重试必须和幂等、去重、Request ID 一起设计。</p></div>
+      </div>
+      <div class="codebox" style="margin-top:14px">Client
+ ↓ request: charge once
+Server
+ ↓ already succeeded
+Response
+ X lost
+
+Client sees:
+Timeout
+
+问题：
+Server 没执行？
+还是执行成功但 Response 丢了？
+
+盲目 Retry
+→ 可能重复扣款</div>
+    </section>
+
+    <section class="section" id="discovery">
+      <span class="eyebrow">服务寻址</span>
+      <h2>9. Service Discovery 与 Load Balancing：Name → Endpoint Set → Pick One</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag blue">DNS-based</span>
+          <div class="codebox">user-service.internal
+        ↓ DNS / CoreDNS
+10.23.4.12
+10.23.4.19
+10.23.5.31</div>
+          <p>通用、简单，但要考虑 TTL、Cache、健康状态粒度与变更实时性。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag purple">Registry-based</span>
+          <div class="codebox">Service Instance
+   ↓ register / lease
+Service Registry
+   ↓ endpoint / health / metadata
+Client / Proxy / LB</div>
+          <p>Consul / etcd 类系统更像显式维护 Endpoint 与健康/租约状态。</p>
+        </div>
+      </div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card"><span class="tag green">Client-side LB</span><p>Client 自己拿到 Endpoint Set，并自己选择本次请求的目标实例。</p></div>
+        <div class="grid-card"><span class="tag orange">Server-side LB</span><p>Client 只连接稳定 VIP / Proxy，由中间入口替它完成实例选择。</p></div>
+      </div>
+    </section>
+
+    <section class="summary" id="summary">
+      <h2>10. 一页总结：现代协议并不是互相替代，而是解决不同层的问题</h2>
+      <div class="codebox">HTTP/1.1
+   ↓ 并发与 framing 限制
+HTTP/2
+   ↓ Frame + Stream + Multiplexing
+TCP
+   ↓ global ordered byte stream
+TCP HOL
+   ↓
+QUIC
+   ↓ independent streams + recovery + congestion + TLS 1.3
+HTTP/3
+
+旁支：
+WebSocket
+→ 长期双向 Message Channel
+
+RPC
+→ Remote Method Call abstraction
+→ gRPC / Thrift / custom RPC
+→ Deadline / Retry / Discovery / LB</div>
+
+      <div class="grid-2" style="margin-top:18px">
+        <div>
+          <h3>这一章最该记住</h3>
+          <ol class="checklist">
+            <li>HTTP/2 Multiplexing 不等于多条 TCP。</li>
+            <li>TCP HOL 来自全局有序 Byte Stream。</li>
+            <li>QUIC 在 UDP 上自己实现可靠性与拥塞控制。</li>
+            <li>Packet Number、Stream Offset、Connection ID 解决不同问题。</li>
+            <li>WebSocket 是消息通道；RPC 是调用模型。</li>
+          </ol>
+        </div>
+        <div>
+          <h3>下一章会把这些协议放进真实生产拓扑</h3>
+          <div class="pill-list">
+            <span class="pill">CDN</span><span class="pill">WAF</span><span class="pill">L4/L7 LB</span>
+            <span class="pill">Gateway</span><span class="pill">RPC</span><span class="pill">Redis / MySQL</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
 </div>
-
-<h2>14 · gRPC 与 Thrift 应该放在哪一层？</h2>
-<div class="grid2">
-<div class="card"><span class="tag">gRPC</span><h3>RPC Framework</h3><p>常见组合：gRPC + Protobuf + HTTP/2 + TLS + TCP。gRPC 不等于 HTTP/2。</p></div>
-<div class="card"><span class="tag">Thrift</span><h3>IDL + Codegen + Protocol + Transport</h3><p>是一整套 RPC 工具链，不只是一个序列化格式，也不能和 TCP 当成同层方案比较。</p></div>
-</div>
-
-<h2>15 · RPC 真正难的不是“发过去”</h2>
-<div class="grid3">
-<div class="card"><b>Deadline / Cancellation</b><p>限制调用链总预算，避免慢依赖无限拖住上游。</p></div>
-<div class="card"><b>Retry</b><p>Timeout 不代表 Server 没执行；重试必须结合幂等与去重。</p></div>
-<div class="card"><b>Discovery / LB</b><p>Service Name → Endpoint Set，再决定本次 Request 发给哪个实例。</p></div>
-</div>
-
-<h2>16 · Service Discovery</h2>
-<div class="grid2">
-<div class="card"><b>DNS-based</b><p>user-service.internal → A/AAAA/SRV/Service 相关记录；Kubernetes 常配合 CoreDNS。</p></div>
-<div class="card"><b>Registry-based</b><p>实例注册/租约/健康/metadata，由 Client、Proxy 或 LB 获取 Endpoint Set。</p></div>
-</div>
-
-<h2>17 · 一张最终分层图</h2>
-<div class="packet">业务调用语义
-RPC / Web App
-        ↓
-应用协议 / 框架
-gRPC / WebSocket / HTTP
-        ↓
-HTTP/2              HTTP/3
-  ↓                   ↓
-TLS + TCP            QUIC
-                       ↓
-                      UDP
-        ↓
-        IP
-        ↓
-Route / L2 / NIC / Internet
-
-Service Discovery:
-名字 → Endpoint Set
-
-Load Balancing:
-Endpoint Set → 这一次选谁</div>
-
-<footer>完整正文、自测、QPACK、Connection Migration、Deadline/Retry/Idempotency 细节见 06-modern-protocols.md</footer>
-</main></body></html>
+</body>
+</html>
