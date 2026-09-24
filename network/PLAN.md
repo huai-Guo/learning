@@ -1,0 +1,511 @@
+# 计算机网络扫盲：建设计划
+
+> 目标：把 network 目录建设成一套**计算机小白能顺着读、后端开发能继续深入、面试前能复盘**的网络课程。
+
+主线只保留一条：
+
+> **电脑获得网络配置 → 输入 URL → DNS → 建连 → 路由转发 → TLS → HTTP → 响应返回。**
+
+---
+
+# 1. 当前状态
+
+## Phase 0｜课程骨架
+
+- [x] network 从空文件改成目录
+- [x] README 总入口
+- [x] HTML 视觉总览
+- [x] 参考资料清单
+- [x] 确立“参与者边界 + 因果链”教学原则
+
+## Phase 1｜请求主线
+
+- [x] 00：电脑入网前置（DHCP / IP / Gateway / DNS Server）
+- [x] 01：URL → DNS → Socket → Route → ARP/NDP → NAT/PAT → TCP → TLS → HTTP
+- [x] 第一轮架构 Review
+- [x] 修正 Happy Eyeballs 与 connect 的关系
+- [x] 修正 NAT/PAT 的参与者位置
+- [x] 增加 IPv4 / IPv6 分支
+- [x] 增加服务端 LISTEN / accept / connected socket
+- [x] 修正 TLS 1.3 的证书验证时序
+- [x] 明确 HTTP/3 不走 TCP
+
+当前结论：
+
+> Phase 0/1 已形成可继续扩展的“母图”，后续章节只放大母图中的节点，不重新发明流程。
+
+---
+
+# 2. 全仓库必须遵守的图形规范
+
+以后至少区分四种图，不能混画。
+
+## A. 参与者图：谁在做事
+
+~~~text
+Browser
+ ↓
+OS Kernel
+ ↓
+Home Router
+ ↓
+ISP / Internet
+ ↓
+Server Kernel
+ ↓
+Server Process
+~~~
+
+## B. 协议封装图：数据套了哪些头
+
+~~~text
+HTTP
+ ↓
+TLS
+ ↓
+TCP
+ ↓
+IP
+ ↓
+L2 Frame
+~~~
+
+## C. 时序图：谁先发什么
+
+~~~text
+Client                  Server
+SYN -------------------->
+    <------------- SYN+ACK
+ACK -------------------->
+~~~
+
+## D. 状态/决策图：为什么走这个分支
+
+~~~text
+目标 IP
+  ↓
+Route
+  ├─ 同子网 → 下一跳就是目标
+  └─ 异网段 → 下一跳是 Gateway
+~~~
+
+一个图只回答一类问题。
+
+---
+
+# 3. 章节统一模板
+
+每一章统一包含：
+
+1. 这一章只解决一个问题
+2. 先看它在母图中的位置
+3. 为什么需要它
+4. 最小模型
+5. 真实执行流程
+6. 参与者边界
+7. 常见分支 / 异常
+8. 放回 URL 主线
+9. 本机实验
+10. 最容易混淆的点
+11. 一句话记忆
+12. 自测
+13. 延伸阅读
+
+---
+
+# 4. Phase 2｜网络分层与 OS 收发包
+
+状态：**第一版已完成并落库**
+
+- [x] Markdown 正文：02-network-model-and-packets.md
+- [x] HTML 视觉版：02-network-model-and-packets.html
+- [x] 四类图严格分离：协议层次 / 封装 / 本机实现 / 设备路径
+- [x] 补齐 send → socket → TCP → IP → route → neighbor → qdisc → driver → ring/DMA → NIC
+- [x] 补齐接收方向、NAPI、RX Ring、socket receive buffer
+- [x] 补齐 MTU/MSS、IPv4 fragmentation、PMTU 与 GSO/TSO/GRO 的入门边界
+
+文件：02-network-model-and-packets.md
+
+核心问题：
+
+> 应用调用 send()/recv() 后，数据究竟如何穿过用户态、内核、驱动和网卡？
+
+必须覆盖：
+
+- TCP/IP 四层与 OSI 七层
+- “属于哪一层”到底是什么意思
+- HTTP → TLS → TCP → IP → L2 封装
+- 服务端反向解封装
+- User Process / syscall / Socket
+- TCP / IP / Route / Netfilter
+- Neighbor subsystem
+- qdisc
+- Driver
+- TX/RX Ring
+- DMA
+- NIC
+- interrupt / softirq / NAPI（先建立概念，不深挖内核源码）
+- MTU / MSS
+- TCP segmentation 与 IP fragmentation 的区别
+
+主要参考：
+
+- CS-Base/network/1_base/tcp_ip_model.md
+- CS-Base/network/1_base/how_os_deal_network_package.md
+- CS-Base/network/1_base/what_happen_url.md
+
+---
+
+# 5. Phase 3｜IP、子网、路由、ARP/NDP、NAT
+
+状态：**第一版已完成并落库**
+
+- [x] Markdown 正文：03-ip-routing-arp-nat.md
+- [x] HTML 视觉版：03-ip-routing-arp-nat.html
+- [x] CIDR / 子网 / 最长前缀匹配 / 默认路由
+- [x] 同网段 vs 异网段，Route → ARP/NDP
+- [x] Switch MAC Table 与 Route Table 的边界
+- [x] Control Plane / Data Plane / BGP / FIB 入门
+- [x] TTL / Hop Limit / ICMP / ping / traceroute
+- [x] SNAT / DNAT / PAT / NAPT / Conntrack
+- [x] NAT 返回路径、CGNAT、IPv6 与 NAT/firewall 边界
+
+文件：03-ip-routing-arp-nat.md
+
+核心问题：
+
+> 已经知道目标 IP 后，包到底为什么能一跳一跳到目标？
+
+必须覆盖：
+
+- IPv4 / IPv6
+- CIDR / 子网掩码
+- 网络地址、主机地址
+- 私网 / 公网
+- 默认网关
+- 路由表
+- 最长前缀匹配
+- 直连路由 / 默认路由
+- ARP + ARP Cache
+- IPv6 NDP
+- MAC 只负责当前链路
+- DHCP
+- ICMP
+- ping
+- traceroute / tracert
+- NAT / SNAT / DNAT
+- PAT / NAPT
+- Conntrack
+- 为什么 NAT 返回包知道回哪台内网机器
+- CGNAT 作为进阶
+- NAT 穿透只做概览
+
+---
+
+# 6. Phase 4｜TCP / UDP
+
+状态：**第一版已完成并落库**
+
+- [x] Markdown 正文：04-tcp-udp.md
+- [x] HTML 视觉版：04-tcp-udp.html
+- [x] fd / socket / port / TCP connection 边界
+- [x] LISTEN socket / connected socket / accept queue
+- [x] listen 但不 accept、无 listener、firewall drop 对比
+- [x] 三次握手 / ISN / Seq / Ack / TCP options
+- [x] TCP byte stream 与 UDP datagram
+- [x] RTO / Fast Retransmit / SACK
+- [x] Sliding Window / rwnd / Zero Window / Flow Control
+- [x] cwnd / Congestion Control / Slow Start 入门
+- [x] FIN / CLOSE_WAIT / TIME_WAIT / RST
+- [x] Keepalive / 拔网线 / 进程崩溃 / 整机断电
+- [x] Windows / Linux / Wireshark 实验
+
+文件：04-tcp-udp.md
+
+主线：
+
+> IP 只负责“尽力送包”，TCP 为什么还能提供可靠字节流？
+
+必须覆盖：
+
+- Socket 与 TCP connection
+- 四元组
+- 临时端口
+- LISTEN socket / connected socket
+- SYN / ACK / FIN / RST
+- 三次握手
+- 为什么不能两次
+- 四次挥手
+- TIME_WAIT
+- Seq / Ack
+- 重传
+- RTT / RTO
+- Fast Retransmit
+- Sliding Window
+- Flow Control
+- Congestion Control
+- Keepalive
+- 半连接队列 / accept queue
+- TCP 字节流
+- UDP 报文语义
+- TCP/UDP 是否能用同一个端口
+- MTU/MSS 的衔接
+
+增加“故障理解状态机”模块：
+
+- 服务端没 listen 会怎样
+- listen 了但没 accept 会怎样
+- SYN 丢了会怎样
+- 进程崩溃 vs 主机断电
+- 拔网线后连接是否还存在
+- TIME_WAIT 为什么存在
+- 长时间空闲如何发现对端失效
+
+---
+
+# 7. Phase 5｜HTTP / HTTPS / TLS
+
+状态：**第一版已完成并落库**
+
+- [x] Markdown 正文：05-http-https-tls.md
+- [x] HTML 视觉版：05-http-https-tls.html
+- [x] HTTP Request / Response / Method / Status / Header / Body
+- [x] Safe / Idempotent / GET vs POST 语义
+- [x] Host / SNI / :authority 的协议层边界
+- [x] HTTP/1.1 Message Framing / Content-Length / Chunked
+- [x] Cookie / Session / Secure / HttpOnly / SameSite
+- [x] Cache-Control / ETag / 304
+- [x] HTTP persistent connection 与 TCP Keepalive 区分
+- [x] Symmetric / Public-key / Hash / Digital Signature / AEAD
+- [x] ECDHE ephemeral key 与 Certificate identity key 分离
+- [x] HKDF / Forward Secrecy
+- [x] CA 事前签发 vs TLS 运行时两时间轴
+- [x] Root / Intermediate / Leaf / Trust Store
+- [x] Certificate Signature vs CertificateVerify
+- [x] TLS 1.3 ClientHello / ServerHello / EncryptedExtensions / Finished
+- [x] TLS 1.2 vs TLS 1.3
+- [x] PSK / Session Resumption / 0-RTT / Replay Risk
+- [x] CRL / OCSP / OCSP Stapling
+- [x] ECH 入门与 HTTPS metadata 边界
+- [x] Browser DevTools / curl / OpenSSL / Wireshark 实验
+
+文件：05-http-https-tls.md
+
+HTTP：
+
+- Request / Response
+- method
+- status code
+- header / body
+- Host / :authority
+- Cookie / Session
+- HTTP Keep-Alive
+- 缓存
+- Content-Length / chunked
+- HTTP/1.1 连接复用
+
+TLS：
+
+- TLS 1.2 vs TLS 1.3
+- 对称加密
+- 非对称密码
+- Hash
+- MAC / AEAD
+- 数字签名
+- ECDHE
+- HKDF
+- 前向保密
+- ClientHello
+- SNI
+- ALPN
+- ServerHello
+- Certificate
+- Intermediate CA / Root CA
+- Trust Store
+- CertificateVerify
+- Finished
+- CRL / OCSP
+- Session Resumption
+- 0-RTT（进阶）
+- ECH（进阶）
+
+必须坚持两个时间轴：
+
+~~~text
+证书签发：
+Site → CA → Certificate → 部署
+
+运行时 TLS：
+Browser ↔ Server
+~~~
+
+---
+
+# 8. Phase 6｜HTTP/2、HTTP/3、QUIC、WebSocket、RPC
+
+状态：**第一版已完成并落库**
+
+- [x] Markdown 正文：06-modern-protocols.md
+- [x] HTML 视觉版：06-modern-protocols.html
+- [x] HTTP/1.1 并发限制与 HTTP 层 HOL
+- [x] HTTP/2 Binary Frame / Stream / Message / Multiplexing / HPACK
+- [x] TCP-level HOL 与 HTTP/2 的边界
+- [x] QUIC 为什么选择 UDP 作为底层接口
+- [x] QUIC Packet Number vs Stream ID / Offset
+- [x] Stream / Connection 两级 Flow Control
+- [x] ACK / Loss Recovery / Congestion Control
+- [x] TLS 1.3 与 QUIC 集成
+- [x] Connection ID / Path Validation / Connection Migration
+- [x] HTTP/3 / QPACK
+- [x] HTTP/2 Server Push 的协议支持 vs 当前浏览器实践
+- [x] Polling / Long Polling / WebSocket
+- [x] WebSocket Upgrade / Full-Duplex / Ping-Pong
+- [x] WebSocket over HTTP/2 / HTTP/3 概览
+- [x] RPC / Stub / IDL / Serialization 分层
+- [x] gRPC / Protobuf / HTTP/2 / TLS / TCP 的关系
+- [x] Thrift 的 IDL / Protocol / Transport 边界
+- [x] Deadline / Cancellation / Retry / Idempotency
+- [x] DNS/CoreDNS 与 Registry-based Service Discovery
+- [x] Client-side vs Server-side Load Balancing
+
+文件：06-modern-protocols.md
+
+- HTTP/1.1 应用层队头阻塞
+- HTTP/2 frame / stream / multiplexing
+- TCP 层队头阻塞
+- QUIC 为什么建立在 UDP 上
+- QUIC connection ID
+- QUIC stream
+- TLS 1.3 如何集成进 QUIC
+- HTTP/3
+- 网络迁移
+- WebSocket Upgrade / 双向长连接
+- RPC 是什么
+- HTTP 与 RPC 的关系
+- 服务发现
+- DNS / CoreDNS / Consul / etcd
+
+---
+
+# 9. Phase 7｜真实后端网络拓扑
+
+状态：**第一版已完成并落库**
+
+- [x] Markdown 正文：07-backend-network-topology.md
+- [x] HTML 视觉版：07-backend-network-topology.html
+- [x] DNS → CDN / Edge → Origin 的真实入口关系
+- [x] CDN Cache Hit / Miss / 回源
+- [x] WAF vs Network Firewall
+- [x] L4 vs L7 Load Balancer
+- [x] TLS Termination / Re-encrypt / Passthrough
+- [x] Nginx / Envoy / API Gateway 的职责边界
+- [x] Reverse Proxy vs Forward Proxy
+- [x] X-Forwarded-For / Forwarded / Trusted Proxy Boundary
+- [x] PROXY Protocol 与 HTTP Header 的层次区别
+- [x] 公网 HTTP → 内网 RPC 的协议切换
+- [x] Service Discovery → Endpoint Set → Load Balancing
+- [x] Client-side / Server-side / Sidecar LB
+- [x] Connection Pool / Keepalive / Idle Timeout / Drain
+- [x] Deadline Budget / Retry Storm / Circuit Breaker / Load Shedding
+- [x] Redis / MySQL 私网访问与连接池
+- [x] Readiness / Liveness / Graceful Shutdown
+- [x] mTLS / Service Mesh / North-South / East-West
+- [x] Trace ID 与 TCP / QUIC Connection ID 的边界
+- [x] 502 / 503 / 504 与分层排障
+
+文件：07-backend-network-topology.md
+
+贯穿：
+
+~~~text
+Browser
+ → DNS
+ → CDN
+ → WAF
+ → L4/L7 Load Balancer
+ → Nginx / API Gateway
+ → Backend Service
+ → RPC
+ → Redis / MySQL
+~~~
+
+重点：
+
+- 域名最终可能先指向 Edge/CDN，而不是业务机器
+- CDN
+- WAF
+- 正向代理 / 反向代理
+- L4 / L7 Load Balancer
+- TLS termination
+- X-Forwarded-For
+- Proxy Protocol
+- API Gateway
+- 内网 DNS / 服务发现
+- 连接池
+- 长连接
+- 超时
+- 重试
+- 幂等
+
+---
+
+# 10. 当前阶段｜视觉化统一与阅读体验打磨
+
+用户明确不继续新增第 08 章实验章节。当前目标调整为：
+
+> **把 01～07 已有内容做成统一、美观、图文并茂、计算机小白也容易顺着读下去的视觉课程。**
+
+当前视觉化要求：
+
+- [x] 01～07 使用统一浅色视觉体系
+- [x] 每章提供左侧目录导航
+- [x] 每章使用统一 Hero / Section / Card / Callout / Codebox 组件
+- [x] 复杂流程优先使用文字图、流程图、时序布局，而不是只堆文字
+- [x] 每章保留 Markdown 正文作为完整知识真源
+- [x] HTML 负责降低阅读门槛与提高复习效率
+- [x] index.html 改为统一视觉课程首页
+- [x] 01 补齐 HTML 视觉版
+- [x] 02～07 统一到相同视觉规范
+- [x] 抽取共享样式到 assets/course.css
+
+后续只做已有章节的视觉与教学质量优化，包括：
+
+- 调整章节节奏与信息密度
+- 增加必要的对比卡片 / 因果流程图 / 状态图
+- 减少连续大段文字
+- 提升初学者理解路径
+- 对容易混淆的概念增加“不要混”的视觉提醒
+- 统一术语、配色、间距、导航和章节收束方式
+
+---
+
+# 12. 准确性红线
+
+后续任何章节都不得违反：
+
+- DNS 地址解析与 URL 端口来源分开讲。
+- Stub Resolver 作为角色解释，不伪装成固定独立进程。
+- Happy Eyeballs = 排序 + 错峰 connect 竞争。
+- TCP SYN 已存在后，才被 Route / ARP / NAT / Internet transport。
+- Route 先决定下一跳，ARP/NDP 再解决当前链路邻居。
+- ARP 只用于 IPv4；IPv6 使用 NDP 等机制。
+- NAT/PAT 画在 NAT Router 中，不画进 Browser/OS protocol stack。
+- NAPT/PAT 作为一次状态化映射解释，不机械拆成 NAT → PAT。
+- TLS 1.2 / TLS 1.3 分开。
+- ECDHE 临时密钥与证书身份公钥分开。
+- 数字签名 = 私钥签名、公钥验证。
+- CA 的事前签发与运行时验证分两个时间轴。
+- HTTP/3 = QUIC/UDP，不强行套 TCP 主线。
+- 任何简化必须显式写“这里为了入门省略了什么”。
+
+---
+
+# 13. 参考策略
+
+以 xiaolincoder/CS-Base/network 作为知识覆盖参考，但不照抄章节结构。
+
+本项目自己的组织原则：
+
+> **先因果链 → 再协议细节 → 再 OS 实现 → 再真实后端 → 最后面试复盘。**
+
+详细来源见 SOURCES.md。

@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>01｜从 URL 到网页返回</title>
+  <link rel="stylesheet" href="./assets/course.css">
+</head>
+<body>
+<div class="page">
+  <aside class="toc">
+    <h2>01 · 从 URL 到网页</h2>
+    <p>这一章是整套课程的“母图”。后面的章节，都是把这里的一块放大。</p>
+    <a href="#hero">0. 学习目标</a>
+    <a href="#actors">1. 谁在做事</a>
+    <a href="#url-dns">2. URL 与 DNS</a>
+    <a href="#happy">3. 地址选择与 connect</a>
+    <a href="#kernel">4. SYN、Route、ARP</a>
+    <a href="#nat">5. Router 与 NAT/PAT</a>
+    <a href="#server">6. Internet 与 Server</a>
+    <a href="#tls">7. TLS / CA / Certificate</a>
+    <a href="#http">8. HTTP 与返回链路</a>
+    <a href="#master">9. 母图总结</a>
+  </aside>
+
+  <main class="content">
+    <section class="hero" id="hero">
+      <span class="badge">Chapter 01 · Mother Map</span>
+      <h1>从输入 URL 到网页返回：<br>一条 HTTPS 请求到底经历了什么？</h1>
+      <p class="lead">先不要急着背 DNS、ARP、TCP、TLS。先把它们放回同一条链路里：<b>Browser 提出意图 → DNS 找地址 → Kernel 发起连接 → Router/NAT 转发 → Server 接收 → TLS 建立身份与密钥 → HTTP 真正传业务数据</b>。</p>
+      <div class="hero-grid">
+        <div class="mini-card">
+          <h3>本章主线</h3>
+          <ul>
+            <li>默认以 HTTP/1.1 或 HTTP/2 over TCP + TLS 1.3 为主线。</li>
+            <li>HTTP/3 / QUIC 在后续章节单独展开。</li>
+            <li>重点是先建立“谁、在哪、什么时候做了什么”的顺序。</li>
+          </ul>
+        </div>
+        <div class="mini-card">
+          <h3>最重要的三个纠错</h3>
+          <ul>
+            <li>TCP 不是等 Route / NAT 全结束后才开始。</li>
+            <li>NAT/PAT 不是 Browser 本机动作，而是中间 NAT 设备处理已有 IP/TCP 包。</li>
+            <li>CA 不是每次打开网站都实时批准 TLS。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="top-links"><a href="./README.md">返回总目录</a><a href="./01-url-to-webpage.md">完整 Markdown</a><a href="./02-network-model-and-packets.html">下一章</a></div>
+    </section>
+
+    <section class="section" id="actors">
+      <span class="eyebrow">第一步：分清“谁”</span>
+      <h2>1. 一次访问至少横跨这些参与者</h2>
+      <p class="intro">最常见的学习误区，是把所有步骤都画成一根箭头。先把参与者拆开，后面才能理解哪些事情发生在 Browser、Kernel、Router 或 Server。</p>
+      <div class="codebox">Browser / App
+   │ 名称解析 / socket / TLS / HTTP
+   ▼
+Client OS Kernel
+   │ TCP / IP / Route / Neighbor
+   ▼
+NIC
+   │
+   ▼
+Home Router
+   │ Routing / Conntrack / NAT-PAT
+   ▼
+ISP / Internet
+   │
+   ▼
+Server Network
+   ▼
+Server Kernel
+   ▼
+Server Process / TLS / HTTP
+
+旁路参与者：
+DNS System
+CA / Trust Store</div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">角色图</span><p>回答“谁在做事”。例如 Browser、Kernel、Router、Server Process。</p></div>
+        <div class="grid-card"><span class="tag purple">协议栈</span><div class="codebox">HTTP
+ ↓
+TLS
+ ↓
+TCP
+ ↓
+IP
+ ↓
+Ethernet / Wi-Fi</div><p>回答“数据被什么协议一层层包装”。它和“设备经过顺序”不是一回事。</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="url-dns">
+      <span class="eyebrow">名字变地址</span>
+      <h2>2. URL 与 DNS：先弄清“我要谁”</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag blue">URL 解析</span>
+          <div class="codebox">https://shop.example.com:443/products?lang=zh-CN#reviews
+│       │                 │    │         │           │
+scheme  hostname          port path      query       fragment</div>
+          <p>HTTPS 默认端口通常是 443。DNS 主要负责 hostname → 地址，不负责把 443“查出来”。fragment 一般只在浏览器本地使用。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag green">名称解析</span>
+          <div class="codebox">Browser
+  ↓
+本机 resolver / cache / hosts
+  ↓ miss
+Recursive Resolver
+  ↓
+Root
+  ↓
+TLD
+  ↓
+Authoritative DNS
+  ↓
+A / AAAA / CNAME ...</div>
+          <p>现实中缓存命中非常普遍，不是每次请求都完整走 Root → TLD → Authoritative。</p>
+        </div>
+      </div>
+      <div class="callout"><div class="icon">i</div><div><strong>hosts ≠ DNS Cache</strong><div>hosts 是静态本机映射；DNS Cache 是以前查询得到的 Resource Record 临时保存，两者来源和生命周期不同。</div></div></div>
+    </section>
+
+    <section class="section" id="happy">
+      <span class="eyebrow">地址选择</span>
+      <h2>3. DNS 可能返回很多地址，Happy Eyeballs 会直接参与连接尝试</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag orange">候选地址</span>
+          <div class="codebox">A     shop.example.com → 203.0.113.20
+AAAA  shop.example.com → 2001:db8::20</div>
+          <p>更准确的说法不是“DNS 给我一个 IP”，而是“DNS 给我一组候选地址”。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag purple">Happy Eyeballs</span>
+          <div class="codebox">对候选排序
+   ↓
+connect(IPv6, 443)
+   ↓ 短延迟后仍未成功
+connect(IPv4, 443)
+   ↓
+多个尝试短时间重叠
+   ↓
+先成功者成为 winning socket
+   ↓
+取消其余尝试</div>
+          <p>它不是“先选 IP、再 connect”，而是通过错峰连接尝试，让 IPv4 / IPv6 都有机会快速成功。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="kernel">
+      <span class="eyebrow">连接真正开始</span>
+      <h2>4. connect() 之后，TCP SYN 已经产生；Route / ARP 是在搬运它</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag blue">Socket</span>
+          <div class="codebox">Browser Process
+   ↓ fd / handle
+Kernel Socket Object
+   ├─ local IP / port
+   ├─ remote IP / port
+   ├─ send / recv buffer
+   └─ TCP state
+
+192.168.1.20:53124
+        →
+203.0.113.20:443</div>
+          <p>客户端如果没有显式 bind 本地端口，OS 通常会选择临时端口。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag red">顺序纠错</span>
+          <div class="codebox">connect()
+  ↓
+TCP SYN 已存在
+  ↓
+IP
+  ↓
+Route：下一跳是谁？
+  ↓
+ARP / NDP：下一跳链路地址是什么？
+  ↓
+L2 Frame
+  ↓
+NIC 发出去</div>
+          <p>不要画成“先完成 Internet Routing，再开始 TCP”。TCP 连接尝试已经开始，网络层是在承载 SYN / SYN-ACK / ACK。</p>
+        </div>
+      </div>
+      <div class="grid-3" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">Route</span><h3>目标 IP → 下一跳</h3><p>如果目标不在本地子网，下一跳通常是默认网关。</p></div>
+        <div class="grid-card"><span class="tag orange">ARP / NDP</span><h3>下一跳 → 链路地址</h3><p>IPv4 Ethernet 常用 ARP；IPv6 用 NDP，不用 ARP。</p></div>
+        <div class="grid-card"><span class="tag green">L2 Frame</span><h3>只管当前一跳</h3><p>第一跳目标 MAC 是 Router MAC，但 IP 目的地址仍然是最终 Server IP。</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="nat">
+      <span class="eyebrow">家庭路由器</span>
+      <h2>5. NAT / PAT：发生在 Router 上，不是在 Client 本机 TCP 之前</h2>
+      <div class="codebox">Laptop 内部原始连接
+192.168.1.20:53124
+        →
+203.0.113.20:443
+
+            ↓ Home Router
+
+典型 NAT/PAT 映射
+192.168.1.20:53124
+        ↕
+198.51.100.8:62001
+
+公网侧看到
+198.51.100.8:62001
+        →
+203.0.113.20:443</div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card"><span class="tag red">不要机械画成</span><div class="codebox">NAT
+ ↓
+PAT</div><p>在典型 NAPT/PAT 中，地址和端口改写可以是同一次映射操作的一部分。</p></div>
+        <div class="grid-card"><span class="tag green">为什么 PAT 有价值</span><p>多个私网主机可以共享一个公网 IPv4。外部端口帮助 NAT 设备区分并反向映射不同内部连接。</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="server">
+      <span class="eyebrow">跨越 Internet 到 Server</span>
+      <h2>6. Internet Routing 与 Server 443：谁真正接住了 SYN？</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag blue">Internet Routing</span>
+          <div class="codebox">Home Router
+   ↓
+ISP Access
+   ↓
+ISP Core
+   ↓
+Other AS
+   ↓
+Target Network
+   ↓
+Server / Edge</div>
+          <p>BGP 更像控制面，用来传播可达前缀；真正每一跳转发时，Router 依据本地 FIB 选择下一跳。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag green">Server 侧</span>
+          <div class="codebox">Server NIC
+ ↓
+Kernel IP
+ ↓
+Kernel TCP
+ ↓
+443 LISTEN socket
+ ↓
+SYN state / queue
+ ↓
+三次握手完成
+ ↓
+accept queue
+ ↓
+accept()
+ ↓
+connected socket
+ ↓
+Server Process</div>
+          <p>443 不只是一个数字；它对应 Server Kernel 中的监听状态和后续连接对象。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="tls">
+      <span class="eyebrow">安全层</span>
+      <h2>7. TLS / CA：一定要分“证书签发时间线”和“用户握手时间线”</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag purple">网站部署前</span>
+          <div class="codebox">Site / Operator
+  ↓ 申请证书 + 域名控制验证
+CA / Intermediate CA
+  ↓ 签发
+Server Certificate
+  ↓
+部署到 Server
+
+Browser / OS
+提前拥有 Trusted Root CA</div>
+          <p>CA 主要在证书签发阶段参与，不是每次用户访问时都实时审批。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag green">用户访问时</span>
+          <div class="codebox">ClientHello
+ ↓
+ServerHello
+ ↓
+ECDHE + HKDF
+ ↓
+EncryptedExtensions
+ ↓
+Certificate
+ ↓
+CertificateVerify
+ ↓
+Server Finished
+ ↓
+Browser 本地验证
+ ↓
+Client Finished</div>
+          <p>通过后，双方才进入真正的 TLS Application Data 阶段。</p>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card">
+          <span class="tag blue">ECDHE 临时 key_share</span>
+          <h3>用来建立本次连接的 Shared Secret</h3>
+          <p>它服务于密钥协商和 Forward Secrecy。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag orange">Certificate Public Key</span>
+          <h3>用来验证 Server 身份签名</h3>
+          <p>Browser 用它验证 CertificateVerify，证明当前握手方掌握证书对应 Private Key。</p>
+        </div>
+      </div>
+      <div class="callout"><div class="icon">!</div><div><strong>这两把“公钥”不是同一个东西</strong><div><b>ECDHE key_share ≠ Certificate identity public key</b>。前者解决“本次连接怎么协商密钥”，后者解决“你到底是谁”。</div></div></div>
+
+      <div class="flow">
+        <div class="step">Leaf / Server Certificate</div>
+        <div class="arrow">↓ signed by</div>
+        <div class="step">Intermediate CA</div>
+        <div class="arrow">↓ chains to</div>
+        <div class="step">Trusted Root CA</div>
+        <div class="arrow">↓</div>
+        <div class="step">Browser / OS Trust Store</div>
+      </div>
+    </section>
+
+    <section class="section" id="http">
+      <span class="eyebrow">业务层</span>
+      <h2>8. HTTP：到这里业务请求才真正通过安全通道发送</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag blue">HTTP/1.1 逻辑</span>
+          <div class="codebox">GET /products?lang=zh-CN HTTP/1.1
+Host: shop.example.com
+User-Agent: ...
+Accept: ...</div>
+          <p>在线路上，旁观者看到的是 TLS Application Data，而不是 HTTP 明文。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag green">返回链</span>
+          <div class="codebox">Server Response
+ ↓
+Internet
+ ↓
+Home Router
+ ↓ NAT reverse mapping
+198.51.100.8:62001
+      ↕
+192.168.1.20:53124
+ ↓
+Client Kernel
+ ↓
+TCP 找到 Socket
+ ↓
+Receive Buffer
+ ↓
+Browser</div>
+          <p>数据回来并不是靠猜：NAT 有映射状态，TCP 有连接状态，Kernel 有 Socket Object。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="summary" id="master">
+      <h2>9. 最终母图：后面所有章节都从这里拆出去</h2>
+      <div class="codebox">【Browser】
+URL
+ ↓
+名称解析
+ ↓
+A / AAAA
+ ↓
+地址排序 + Happy Eyeballs
+ ↓
+winning socket
+
+【Client Kernel】
+connect()
+ ↓
+TCP SYN 已开始
+ ↓
+IP
+ ↓
+Route
+ ↓
+ARP / NDP
+ ↓
+NIC
+
+【Home Router / Edge】
+L2 Receive
+ ↓
+Routing / Conntrack
+ ↓
+NAT/PAT（典型家庭 IPv4）
+ ↓
+WAN
+
+【Internet】
+逐跳 IP Routing
+ ↓
+Target Network
+
+【Server】
+NIC
+ ↓
+Kernel IP/TCP
+ ↓
+443 LISTEN socket
+ ↓
+SYN / SYN-ACK / ACK
+ ↓
+TCP ESTABLISHED
+
+【TLS 1.3】
+ClientHello
+ ↓
+ServerHello
+ ↓
+ECDHE + HKDF
+ ↓
+EncryptedExtensions
+ ↓
+Certificate
+ ↓
+CertificateVerify
+ ↓
+Finished
+ ↓
+Client Finished
+
+【HTTP】
+Encrypted HTTP Request
+ ↓
+Encrypted HTTP Response</div>
+
+      <div class="grid-2" style="margin-top:18px">
+        <div>
+          <h3>这一章最该记住的 6 句话</h3>
+          <ol class="checklist">
+            <li>DNS 给地址候选，不给 443。</li>
+            <li>Happy Eyeballs 本身就在做 connect 竞争。</li>
+            <li>TCP SYN 先产生，Route / ARP / NAT 在运输它。</li>
+            <li>NAT/PAT 在中间设备，不是 Client Browser 里的步骤。</li>
+            <li>CA 主要参与证书签发；运行时 Browser 本地验证证书链。</li>
+            <li>TLS 建立后，HTTP 才通过安全通道传输。</li>
+          </ol>
+        </div>
+        <div>
+          <h3>下一章会把什么放大？</h3>
+          <div class="pill-list">
+            <span class="pill">OSI / TCP-IP</span>
+            <span class="pill">send()</span>
+            <span class="pill">MSS / MTU</span>
+            <span class="pill">qdisc</span>
+            <span class="pill">Driver</span>
+            <span class="pill">DMA</span>
+            <span class="pill">NIC</span>
+            <span class="pill">RX Ring</span>
+            <span class="pill">NAPI</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

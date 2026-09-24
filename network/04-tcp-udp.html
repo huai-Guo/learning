@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>04｜TCP / UDP</title>
+  <link rel="stylesheet" href="./assets/course.css">
+</head>
+<body>
+<div class="page">
+  <aside class="toc">
+    <h2>04 · TCP / UDP</h2>
+    <p>从端口、LISTEN、三次握手，一路讲到 Seq/Ack、重传、窗口、拥塞、挥手和故障状态。</p>
+    <a href="#hero">0. 学习目标</a>
+    <a href="#socket">1. Port / Socket / LISTEN</a>
+    <a href="#handshake">2. 三次握手</a>
+    <a href="#seq">3. Seq / Ack / Byte Stream</a>
+    <a href="#reliable">4. RTO / Fast Retransmit / SACK</a>
+    <a href="#window">5. rwnd / cwnd</a>
+    <a href="#close">6. 四次挥手 / TIME_WAIT</a>
+    <a href="#failure">7. RST / 拔网线 / ACK 丢失</a>
+    <a href="#udp">8. TCP vs UDP</a>
+    <a href="#summary">9. 一页总结</a>
+  </aside>
+
+  <main class="content">
+    <section class="hero" id="hero">
+      <span class="badge">Chapter 04 · Reliable Transport</span>
+      <h1>TCP / UDP：<br>IP 只是尽力交付，TCP 为什么还能提供“可靠字节流”？</h1>
+      <p class="lead">这一章不把 TCP 简化成“三次握手 + 四次挥手”。真正的主线是：<b>连接状态、字节序号、ACK、重传、接收窗口、拥塞窗口、关闭状态</b>共同把不可靠 IP 组织成应用可用的可靠字节流。</p>
+      <div class="hero-grid">
+        <div class="mini-card">
+          <h3>TCP 最核心的 6 个关键词</h3>
+          <ul>
+            <li>四元组</li>
+            <li>状态机</li>
+            <li>Seq / Ack</li>
+            <li>Retransmission</li>
+            <li>rwnd / cwnd</li>
+            <li>FIN / RST / TIME_WAIT</li>
+          </ul>
+        </div>
+        <div class="mini-card">
+          <h3>UDP 最重要的定位</h3>
+          <ul>
+            <li>保留 Datagram 边界。</li>
+            <li>没有 TCP 式连接、顺序与重传。</li>
+            <li>上层协议可以自己重做可靠性，例如 QUIC。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="top-links"><a href="./03-ip-routing-arp-nat.html">上一章</a><a href="./04-tcp-udp.md">完整 Markdown</a><a href="./05-http-https-tls.html">下一章</a></div>
+    </section>
+
+    <section class="section" id="socket">
+      <span class="eyebrow">先弄清连接对象</span>
+      <h2>1. Port、Socket、LISTEN：为什么同一个 443 可以服务大量连接？</h2>
+      <div class="codebox">LISTEN 0.0.0.0:443
+      │
+      ├─ 10.0.0.10:50001 ↔ 203.0.113.20:443
+      ├─ 10.0.0.11:50001 ↔ 203.0.113.20:443
+      └─ 10.0.0.10:50002 ↔ 203.0.113.20:443
+
+TCP Connection 常用四元组：
+src IP + src port + dst IP + dst port</div>
+      <div class="grid-3" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">Port</span><p>是 Transport endpoint 的一部分，不等于某个进程本身。</p></div>
+        <div class="grid-card"><span class="tag green">LISTEN Socket</span><p>用来接收新的连接请求，并不是每个客户端都直接“占用一个 443 监听端口”。</p></div>
+        <div class="grid-card"><span class="tag orange">Connected Socket</span><p>三次握手后，为具体四元组维护连接状态，应用通过 accept() 获得它。</p></div>
+      </div>
+      <div class="flow">
+        <div class="step">socket()</div>
+        <div class="arrow">↓</div>
+        <div class="step">bind(IP, 443)</div>
+        <div class="arrow">↓</div>
+        <div class="step">listen()</div>
+        <div class="arrow">↓</div>
+        <div class="step">Handshake completes → accept queue</div>
+        <div class="arrow">↓</div>
+        <div class="step">accept() → connected socket</div>
+      </div>
+      <div class="callout"><div class="icon">i</div><div><strong>listen 但暂时不 accept，不代表握手一定失败</strong><div>握手可以先由 Kernel 完成并进入 accept queue；真正问题会在队列持续堆积、backlog 压力和应用 accept rate 不足时出现。</div></div></div>
+    </section>
+
+    <section class="section" id="handshake">
+      <span class="eyebrow">连接建立</span>
+      <h2>2. 三次握手：真正建立的是双方状态与序列空间</h2>
+      <div class="timeline">
+        <div class="lane">
+          <h3>Client</h3>
+          <div class="msg blue">SYN<br>Seq = x</div>
+          <div class="msg">收到 SYN+ACK</div>
+          <div class="msg green">ACK<br>Ack = y+1</div>
+          <div class="msg green">ESTABLISHED</div>
+        </div>
+        <div class="mid"><div>→</div><div>←</div><div>→</div></div>
+        <div class="lane">
+          <h3>Server</h3>
+          <div class="msg orange">LISTEN → SYN-RECEIVED</div>
+          <div class="msg orange">SYN + ACK<br>Seq = y / Ack = x+1</div>
+          <div class="msg">收到最终 ACK</div>
+          <div class="msg green">ESTABLISHED</div>
+        </div>
+      </div>
+      <div class="grid-3" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">交换 ISN</span><p>双方建立自己的 Sequence Number 空间。</p></div>
+        <div class="grid-card"><span class="tag green">确认双向通信</span><p>Client 确认 Server SYN，Server 也确认 Client 的连接意图。</p></div>
+        <div class="grid-card"><span class="tag purple">协商 TCP Options</span><p>例如 MSS、Window Scale、SACK Permitted 等。</p></div>
+      </div>
+      <div class="callout"><div class="icon">!</div><div><strong>为什么 SYN / FIN 会让 ACK +1？</strong><div>因为它们虽然不承载普通 payload，也会占用一个 Sequence Number，用于明确控制事件在字节序列中的位置。</div></div></div>
+    </section>
+
+    <section class="section" id="seq">
+      <span class="eyebrow">可靠性的坐标轴</span>
+      <h2>3. Seq / Ack：TCP 编号的是“字节位置”，不是“第几个包”</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag blue">Sequence Number</span>
+          <div class="codebox">seq = 1001
+len = 500
+
+表示携带：
+byte 1001 ~ 1500</div>
+          <p>Packet 只是承载这些字节的容器，TCP 真正追踪的是字节空间。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag green">Acknowledgment Number</span>
+          <div class="codebox">ACK = 2001
+
+表示：
+2001 之前的连续字节已确认
+下一步期待 byte 2001</div>
+          <p>TCP 的经典累计 ACK 表达“连续收到哪里”。</p>
+        </div>
+      </div>
+      <div class="callout"><div class="icon">i</div><div><strong>为什么 TCP 是 Byte Stream？</strong><div><code>send("HELLO")</code> + <code>send("WORLD")</code>，对端可能一次 recv 到 <code>HELLOWORLD</code>，也可能拆成多次读取。应用层要自己定义消息边界。</div></div></div>
+    </section>
+
+    <section class="section" id="reliable">
+      <span class="eyebrow">丢包恢复</span>
+      <h2>4. RTO、Fast Retransmit、SACK：TCP 怎么知道“该重发什么”？</h2>
+      <div class="grid-3">
+        <div class="grid-card"><span class="tag orange">RTO</span><h3>超时重传</h3><p>根据 RTT 与波动估算等待时间。迟迟收不到确认，就认为数据可能丢失并重传。</p></div>
+        <div class="grid-card"><span class="tag blue">Fast Retransmit</span><h3>不总等超时</h3><p>经典模型中，重复 ACK 可以提示前面存在缺口，从而更快触发重传。</p></div>
+        <div class="grid-card"><span class="tag green">SACK</span><h3>更精确告诉 Sender</h3><p>Receiver 可以指出哪些后续区间已经收到，减少不必要的整段重传。</p></div>
+      </div>
+      <div class="codebox" style="margin-top:14px">Sender:
+1001~1500  ✓
+1501~2000  X lost
+2001~2500  ✓
+2501~3000  ✓
+
+累计 ACK：
+仍然可能只能告诉你“下一期待 1501”
+
+SACK：
+还能额外告诉你
+2001~3000 已经在我这里</div>
+    </section>
+
+    <section class="section" id="window">
+      <span class="eyebrow">发送速率控制</span>
+      <h2>5. rwnd 与 cwnd：一个保护 Receiver，一个保护 Network</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag green">rwnd · Receive Window</span>
+          <h3>Flow Control</h3>
+          <p>Receiver 告诉 Sender：我还有多少接收缓冲空间。目的是避免发送方把接收端 buffer 撑爆。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag orange">cwnd · Congestion Window</span>
+          <h3>Congestion Control</h3>
+          <p>Sender 根据 ACK、Loss、RTT 等网络信号控制在途数据量。目的是保护网络而不是某个单独 Receiver。</p>
+        </div>
+      </div>
+      <div class="codebox" style="margin-top:14px">大致理解：
+实际在途发送能力
+≈ min(rwnd, cwnd)
+再受 socket buffer、pacing、app write rate 等限制</div>
+      <div class="grid-3" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">Sliding Window</span><p>Sender 不必发一个 byte 就等一个 ACK，可以允许一批数据同时在途。</p></div>
+        <div class="grid-card"><span class="tag red">Zero Window</span><p>Receiver 没空间时可以宣布窗口为 0，Sender 需要等待并探测窗口何时恢复。</p></div>
+        <div class="grid-card"><span class="tag purple">Slow Start / CA</span><p>通过逐步增加发送规模并根据拥塞信号调整，避免一开始就把网络打满。</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="close">
+      <span class="eyebrow">连接关闭</span>
+      <h2>6. 四次挥手：TCP 的两个方向要分别关闭</h2>
+      <div class="timeline">
+        <div class="lane">
+          <h3>Active Closer</h3>
+          <div class="msg red">FIN</div>
+          <div class="msg">收到 ACK</div>
+          <div class="msg">收到对方 FIN</div>
+          <div class="msg blue">ACK</div>
+          <div class="msg orange">TIME_WAIT</div>
+        </div>
+        <div class="mid"><div>→</div><div>←</div><div>←</div><div>→</div></div>
+        <div class="lane">
+          <h3>Passive Closer</h3>
+          <div class="msg">收到 FIN</div>
+          <div class="msg green">ACK → CLOSE_WAIT</div>
+          <div class="msg red">应用 close → FIN</div>
+          <div class="msg">收到最终 ACK</div>
+          <div class="msg green">CLOSED</div>
+        </div>
+      </div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card"><span class="tag red">CLOSE_WAIT 很多</span><p>通常意味着对端已经关闭，但本机应用没有及时 close，优先排查连接泄漏、线程卡住、异常路径。</p></div>
+        <div class="grid-card"><span class="tag orange">TIME_WAIT 很多</span><p>通常表示本机是主动关闭方。短连接多时很常见，不等于必须“消灭 TIME_WAIT”。</p></div>
+      </div>
+      <div class="callout"><div class="icon">i</div><div><strong>“四次挥手”是逻辑阶段，不保证抓包永远恰好四个 Packet</strong><div>ACK 与 FIN 可以在某些情况下合并，因此现实抓包数量可以变化。</div></div></div>
+    </section>
+
+    <section class="section" id="failure">
+      <span class="eyebrow">故障场景</span>
+      <h2>7. RST、拔网线、SYN 丢失：连接坏掉时到底发生什么？</h2>
+      <div class="grid-3">
+        <div class="grid-card"><span class="tag red">No Listener</span><p>访问未监听的 TCP Port 时，常见表现是收到 RST，应用看到 Connection refused。</p></div>
+        <div class="grid-card"><span class="tag orange">Firewall Drop</span><p>如果 SYN 被静默丢弃，Client 往往会重传 SYN，最终表现为 timeout。</p></div>
+        <div class="grid-card"><span class="tag purple">listen but no accept</span><p>握手仍可能完成，但 accept queue 会积压，最终表现取决于 backlog 和系统策略。</p></div>
+      </div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card">
+          <span class="tag blue">拔网线</span>
+          <div class="codebox">ESTABLISHED
+ ↓
+Physical Link Lost
+ ↓
+对端不会收到“网线断了”TCP Packet
+ ↓
+后续依赖：
+Retransmission Failure
+TCP Keepalive
+Application Heartbeat
+OS Error</div>
+        </div>
+        <div class="grid-card">
+          <span class="tag green">进程崩溃 vs 整机断电</span>
+          <p>进程退出但 OS 还活着时，OS 可能正常关闭 Socket；整机断电则没有机会优雅发 FIN，远端只能靠超时、Keepalive 或后续发送失败感知。</p>
+        </div>
+      </div>
+      <div class="callout"><div class="icon">!</div><div><strong>RST 是“立即终止/拒绝连接状态”的控制信号</strong><div>它和 FIN 的“有序关闭”不同，也和静默丢包造成的 timeout 不同。</div></div></div>
+    </section>
+
+    <section class="section" id="udp">
+      <span class="eyebrow">对比视角</span>
+      <h2>8. TCP 与 UDP：不是“高级版 vs 低级版”</h2>
+      <table>
+        <thead><tr><th>维度</th><th>TCP</th><th>UDP</th></tr></thead>
+        <tbody>
+          <tr><td>数据抽象</td><td>Byte Stream</td><td>Datagram</td></tr>
+          <tr><td>连接状态</td><td>有</td><td>无 TCP 式握手</td></tr>
+          <tr><td>顺序 / 重传</td><td>内建</td><td>UDP 本身不提供</td></tr>
+          <tr><td>Flow Control</td><td>有</td><td>无内建</td></tr>
+          <tr><td>Congestion Control</td><td>有</td><td>UDP 本身无内建</td></tr>
+          <tr><td>Message Boundary</td><td>不保留应用消息边界</td><td>保留 Datagram 边界</td></tr>
+        </tbody>
+      </table>
+      <div class="grid-3" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">TCP Keepalive</span><p>Kernel TCP 层探测长期空闲连接是否仍可达。</p></div>
+        <div class="grid-card"><span class="tag green">HTTP persistent connection</span><p>HTTP 层复用底层连接，不等于 TCP Keepalive。</p></div>
+        <div class="grid-card"><span class="tag purple">Application Heartbeat</span><p>业务层判断 Session / Room / Game 等状态是否真正健康。</p></div>
+      </div>
+    </section>
+
+    <section class="summary" id="summary">
+      <h2>9. 一页总结：TCP 的可靠性来自一组机制共同工作</h2>
+      <div class="codebox">【建立】
+LISTEN
+ ↓
+SYN
+ ↓
+SYN-ACK
+ ↓
+ACK
+ ↓
+ESTABLISHED
+
+【可靠传输】
+Seq / Ack
+ ↓
+RTO / Fast Retransmit / SACK
+ ↓
+Sliding Window
+
+【速度控制】
+rwnd → 保护 Receiver
+cwnd → 保护 Network
+
+【关闭】
+FIN / ACK
+ ↓
+CLOSE_WAIT / FIN_WAIT
+ ↓
+TIME_WAIT
+
+【故障】
+RST
+Retransmission Timeout
+TCP Keepalive
+Application Heartbeat</div>
+
+      <div class="grid-2" style="margin-top:18px">
+        <div>
+          <h3>这一章最该记住</h3>
+          <ol class="checklist">
+            <li>同一个 443 可以服务大量四元组不同的连接。</li>
+            <li>Seq 编号的是字节，Ack 表示下一期待字节。</li>
+            <li>TCP 是 Byte Stream，不保留 send() 边界。</li>
+            <li>rwnd 与 cwnd 保护对象不同。</li>
+            <li>TIME_WAIT 和 CLOSE_WAIT 要根据主动/被动关闭方向理解。</li>
+          </ol>
+        </div>
+        <div>
+          <h3>下一章放大</h3>
+          <div class="pill-list">
+            <span class="pill">HTTP</span><span class="pill">TLS 1.3</span><span class="pill">ECDHE</span>
+            <span class="pill">Certificate</span><span class="pill">SNI</span><span class="pill">ALPN</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>
