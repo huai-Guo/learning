@@ -343,6 +343,31 @@ Browser ↔ Server
 
 # 8. Phase 6｜HTTP/2、HTTP/3、QUIC、WebSocket、RPC
 
+状态：**第一版已完成并落库**
+
+- [x] Markdown 正文：06-modern-protocols.md
+- [x] HTML 视觉版：06-modern-protocols.html
+- [x] HTTP/1.1 并发限制与 HTTP 层 HOL
+- [x] HTTP/2 Binary Frame / Stream / Message / Multiplexing / HPACK
+- [x] TCP-level HOL 与 HTTP/2 的边界
+- [x] QUIC 为什么选择 UDP 作为底层接口
+- [x] QUIC Packet Number vs Stream ID / Offset
+- [x] Stream / Connection 两级 Flow Control
+- [x] ACK / Loss Recovery / Congestion Control
+- [x] TLS 1.3 与 QUIC 集成
+- [x] Connection ID / Path Validation / Connection Migration
+- [x] HTTP/3 / QPACK
+- [x] HTTP/2 Server Push 的协议支持 vs 当前浏览器实践
+- [x] Polling / Long Polling / WebSocket
+- [x] WebSocket Upgrade / Full-Duplex / Ping-Pong
+- [x] WebSocket over HTTP/2 / HTTP/3 概览
+- [x] RPC / Stub / IDL / Serialization 分层
+- [x] gRPC / Protobuf / HTTP/2 / TLS / TCP 的关系
+- [x] Thrift 的 IDL / Protocol / Transport 边界
+- [x] Deadline / Cancellation / Retry / Idempotency
+- [x] DNS/CoreDNS 与 Registry-based Service Discovery
+- [x] Client-side vs Server-side Load Balancing
+
 文件：06-modern-protocols.md
 
 - HTTP/1.1 应用层队头阻塞
