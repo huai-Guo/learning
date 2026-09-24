@@ -865,3 +865,304 @@ Service B
 双方都具有身份材料，从而同时获得 Encryption、Integrity、Server Identity 和 Client Identity。
 
 Service Mesh 常把 mTLS、Certificate Rotation、Discovery、Retry、Telemetry 等从业务代码中抽出去。
+
+
+---
+
+# 33. API Gateway 与 Service Mesh
+
+API Gateway 更偏 North-South：
+
+~~~text
+External Client
+ ↓
+Internal System
+~~~
+
+Service Mesh 更偏 East-West：
+
+~~~text
+Service
+ ↔
+Service
+~~~
+
+前者常管 Auth、Rate Limit、Routing、API Policy；后者常管 mTLS、Discovery、Retry、Timeout、Traffic Policy、Telemetry。
+
+现实产品功能可以重叠，但治理对象不同。
+
+---
+
+# 34. Trace ID 为什么存在？
+
+~~~text
+Gateway
+ ↓
+Service A
+ ↓
+Service B
+ ↓
+Redis
+ ↓
+DB
+~~~
+
+如果每层日志没有共同标识，很难追踪一次用户请求。
+
+因此会传播：
+
+~~~text
+Trace ID
+Span ID
+~~~
+
+但它们与连接标识完全不同：
+
+~~~text
+TCP Connection
+→ 传输连接
+
+QUIC Connection ID
+→ QUIC 连接身份
+
+Trace ID
+→ 业务调用链
+~~~
+
+一条 Trace 可以跨很多连接。
+
+---
+
+# 35. 一次请求的角色图
+
+~~~text
+[User Device]
+Browser
+   │ HTTPS
+   ▼
+[Public Edge]
+DNS → CDN / Anycast
+        ├─ Cache
+        ├─ DDoS
+        ├─ WAF
+        └─ TLS
+   │
+   ▼
+[Ingress]
+L4 / L7 Load Balancer
+   ↓
+Nginx / Envoy / API Gateway
+        ├─ Auth
+        ├─ Rate Limit
+        ├─ Routing
+        └─ Observability
+   │
+   ▼
+[Application Network]
+Backend Service
+   ├─ RPC → Other Service
+   ├─ Redis Client → Redis
+   ├─ DB Driver → MySQL
+   └─ MQ Client → Message Queue
+~~~
+
+---
+
+# 36. 一次请求的协议图
+
+~~~text
+Browser → Edge
+HTTP/2 over TLS over TCP
+or
+HTTP/3 over QUIC over UDP
+
+Edge → Gateway
+HTTP/1.1 or HTTP/2
+TLS depends on architecture
+
+Gateway → Backend
+HTTP / gRPC / Thrift / custom RPC
+
+Backend → Redis
+Redis Protocol over TCP
+
+Backend → MySQL
+MySQL Protocol over TCP
+~~~
+
+角色图和协议图不能混成一张箭头。
+
+---
+
+# 37. 一次请求的身份图
+
+~~~text
+DNS Name
+api.example.com
+
+TLS Identity
+Certificate SAN = api.example.com
+
+TCP Peer
+可能是 Proxy / LB
+
+Original Client IP
+来自可信 forwarding metadata
+
+Application User
+Cookie / Token / Session
+
+Service Identity
+mTLS / Workload Identity
+
+Trace Identity
+Trace ID / Span ID
+~~~
+
+所以“你是谁”在不同层有不同答案。
+
+---
+
+# 38. 502、503、504 在真实拓扑中怎么理解？
+
+502 Bad Gateway 常见于 Proxy / Gateway 无法从 Upstream 获得有效响应，例如 Connection Reset、Protocol Error 或 Invalid Response。
+
+503 Service Unavailable 常见于没有健康 Backend、过载、Maintenance、Circuit Open 或 Load Shedding。
+
+504 Gateway Timeout 常见表示 Gateway 等 Upstream 超时。
+
+但具体含义仍以系统实现为准。
+
+---
+
+# 39. 域名 + 端口不通，但 IP + 端口通，怎么排？
+
+~~~text
+DNS 是否解析到正确 Edge / LB？
+ ↓
+IPv4 / IPv6 是否走不同路径？
+ ↓
+TLS SNI 是否依赖 hostname？
+ ↓
+Certificate 是否匹配 hostname？
+ ↓
+HTTP Host / :authority 是否用于虚拟路由？
+ ↓
+CDN / WAF 是否按 Host 做策略？
+ ↓
+Gateway 是否按 Host / Path 路由？
+~~~
+
+IP:port 能通只证明可以到某个 Endpoint，不证明完整 hostname 链路正确。
+
+---
+
+# 40. ping 通为什么不能证明 HTTPS 可用？
+
+~~~text
+ping
+=
+ICMP
+
+HTTPS
+=
+TCP 443
+or
+QUIC UDP 443
+~~~
+
+Ping 成功不代表 TCP 443 开放、UDP 443 开放、TLS 正常、HTTP 正常，或 Gateway 有健康 Backend。
+
+如果 TCP connect 已经成功但接口仍超时，就继续往 TLS、HTTP、Gateway、Backend、RPC、Redis、DB 排。
+
+---
+
+# 41. 最容易混淆的 20 个点
+
+1. DNS 返回的 IP 常是 Edge / LB，不一定是业务 Server。
+2. CDN 不只是缓存，它是 Edge 网络角色。
+3. WAF 与 Network Firewall 关注层次不同。
+4. L4 LB 主要按连接分发，L7 LB 可按 Request 路由。
+5. Load Balancer 不一定终止 TLS。
+6. TLS Termination 后也可以 Re-encrypt。
+7. Reverse Proxy 与 Forward Proxy 站位不同。
+8. Backend TCP Peer 常是 Proxy，而非真实 Client。
+9. X-Forwarded-For 不能无条件信任。
+10. Forwarded / X-Forwarded-* 属于应用层代理元数据。
+11. PROXY Protocol 更适合通用 L4 场景。
+12. API Gateway 与 Nginx / Envoy 能力有重叠但侧重点不同。
+13. 公网 HTTP 与内网 RPC 可以用不同协议。
+14. Service Discovery 与 Load Balancing 是两个步骤。
+15. 一次业务 Request 可能对应很多独立连接。
+16. Timeout 有很多层，不能笼统说网络超时。
+17. Retry 可能制造 Retry Storm。
+18. Database 访问仍然是网络 I/O。
+19. API Gateway 更偏 North-South，Service Mesh 更偏 East-West。
+20. Trace ID、TCP Connection、QUIC CID 属于不同标识层次。
+
+---
+
+# 42. 一句话记忆
+
+> **真实后端网络不是 Browser 直接连业务进程，而是 DNS 先把用户送到 Edge；Edge/WAF/LB/Gateway 负责安全、连接和路由；内部再通过 Service Discovery + Load Balancing + RPC 访问服务，服务通过独立网络连接访问 Redis/MySQL 等基础设施。**
+
+---
+
+# 43. 自测
+
+1. DNS 返回的 IP 为什么可能不是业务 Server IP？
+2. CDN Cache Hit 时 Origin 会不会收到请求？
+3. WAF 和 Firewall 有什么区别？
+4. L4 LB 和 L7 LB 分别根据什么转发？
+5. TLS Termination、Re-encrypt、Passthrough 有什么区别？
+6. 为什么 L7 Routing 经常需要先解 TLS？
+7. Reverse Proxy 为什么让 Backend 看不到真实 Client TCP Peer？
+8. X-Forwarded-For 为什么不能无脑信任？
+9. Forwarded Header 与 PROXY Protocol 有什么区别？
+10. API Gateway 常做哪些事情？
+11. 为什么公网 HTTP 和内网 RPC 可以使用不同协议？
+12. Service Discovery 和 Load Balancing 分别解决什么？
+13. Connection Pool 为什么存在？
+14. Timeout 为什么通常按调用链预算递减？
+15. Retry Storm 是怎样形成的？
+16. Circuit Breaker 与 Load Shedding 分别做什么？
+17. Redis / MySQL 为什么通常不暴露公网？
+18. 一次用户 Request 为什么会产生很多连接？
+19. API Gateway 与 Service Mesh 治理方向有何区别？
+20. Trace ID 为什么不等于 Connection ID？
+
+---
+
+# 44. 下一章
+
+下一章进入实验：
+
+> **08｜Windows / Linux / curl / OpenSSL / Wireshark / DevTools：把前面所有概念在真实机器上验证出来。**
+
+每个实验统一回答：
+
+~~~text
+执行什么？
+ ↓
+看哪一列？
+ ↓
+它对应母图里的哪一步？
+ ↓
+异常时说明什么？
+~~~
+
+---
+
+# 45. 延伸阅读
+
+本章主要是工程拓扑整合，后续在 SOURCES.md 中补充：
+
+- RFC 7239 · Forwarded HTTP Extension
+- HAProxy PROXY Protocol Specification
+- Nginx Reverse Proxy / Load Balancing
+- Envoy Architecture / xDS
+- Kubernetes Service / CoreDNS / Readiness / Liveness
+- gRPC Deadlines / Keepalive / Retry
+- MySQL / Redis connection and pooling references
+
+具体链接见 [SOURCES.md](./SOURCES.md)。
