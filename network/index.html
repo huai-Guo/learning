@@ -3,74 +3,179 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>计算机网络扫盲 · 学习地图</title>
+<title>计算机网络扫盲 · Visual Map</title>
 <style>
-:root{--bg:#f5f8fc;--card:#fff;--ink:#0f2344;--muted:#58708e;--line:#d9e4f2;--blue:#2f67f6;--cyan:#eaf4ff;--green:#eaf9f0;--orange:#fff3e6;--purple:#f2edff}
-*{box-sizing:border-box} body{margin:0;background:linear-gradient(180deg,#eef5fb,#f8fafc 42%,#fff);font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--ink)}
-main{max-width:1180px;margin:0 auto;padding:34px 22px 80px}.hero{background:var(--card);border:1px solid var(--line);border-radius:28px;padding:34px;box-shadow:0 20px 50px rgba(40,75,120,.08)}
-h1{font-size:42px;line-height:1.18;margin:0 0 12px}.sub{font-size:18px;color:var(--muted);line-height:1.8;max-width:900px}
-.note{margin-top:22px;padding:16px 18px;background:#101a31;color:#fff;border-radius:16px;line-height:1.7}
-h2{font-size:28px;margin:42px 0 18px}.lanes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
-.lane{border:1px solid var(--line);border-radius:20px;padding:16px;background:var(--card);min-height:440px}.lane h3{margin:0 0 14px;font-size:17px}.step{padding:12px 13px;border-radius:14px;margin:10px 0;border:1px solid #dce5f0;background:#fbfdff;font-size:14px;line-height:1.45}.step.blue{background:var(--cyan)}.step.green{background:var(--green)}.step.orange{background:var(--orange)}.step.purple{background:var(--purple)}.arrow{text-align:center;color:var(--blue);font-weight:800}
-.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px}.card b{display:block;margin-bottom:8px}.card p{margin:0;color:var(--muted);line-height:1.65;font-size:14px}
-a{color:#1e5dea;text-decoration:none}.links{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}.btn{display:inline-block;padding:10px 14px;border-radius:12px;border:1px solid #bfd0e6;background:#fff}
-@media(max-width:900px){.lanes{grid-template-columns:1fr}.lane{min-height:auto}.grid{grid-template-columns:1fr}h1{font-size:32px}}
+:root{
+  --bg:#f4f8fc;--card:#fff;--ink:#0d2344;--muted:#5c728f;--line:#d7e3f1;
+  --blue:#2c67f2;--blueBg:#edf4ff;--green:#168b55;--greenBg:#edf9f2;
+  --orange:#c76414;--orangeBg:#fff4e9;--purple:#7148d8;--purpleBg:#f4f0ff;
+  --dark:#10192e
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:linear-gradient(180deg,#eef5fb 0,#f8fafc 44%,#fff 100%);font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--ink)}
+main{max-width:1220px;margin:0 auto;padding:28px 22px 90px}
+.hero,.panel{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:28px;box-shadow:0 18px 55px rgba(35,69,110,.08)}
+.hero{padding:34px}
+h1{font-size:42px;line-height:1.18;margin:0 0 12px;letter-spacing:-.5px}
+h2{font-size:29px;margin:44px 0 18px}
+h3{margin:0 0 12px;font-size:18px}
+p{line-height:1.75}
+.sub{font-size:18px;color:var(--muted);max-width:930px}
+.notice{margin-top:22px;padding:16px 18px;background:var(--dark);color:#fff;border-radius:16px;line-height:1.7}
+.nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+.nav a{display:inline-block;padding:10px 13px;border-radius:12px;border:1px solid #bfd0e4;background:#fff;color:#2059cd;text-decoration:none;font-weight:600}
+.pre{display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:12px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:17px}
+.kpi small{display:block;color:var(--muted);margin-bottom:6px}.kpi strong{font-size:19px}
+.flow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
+.lane{border:1px solid var(--line);border-radius:20px;padding:15px;background:var(--card)}
+.step{padding:11px 12px;border-radius:13px;margin:9px 0;border:1px solid #dce5f0;background:#fbfdff;font-size:13.5px;line-height:1.45}
+.blue{background:var(--blueBg)}.green{background:var(--greenBg)}.orange{background:var(--orangeBg)}.purple{background:var(--purpleBg)}
+.arrow{text-align:center;color:var(--blue);font-weight:900}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:19px}
+.card b{display:block;margin-bottom:7px}.card p{margin:0;color:var(--muted);font-size:14px}
+.timeline{display:grid;grid-template-columns:1fr 80px 1fr;align-items:start;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:22px}
+.col .msg{border:1px solid var(--line);border-radius:14px;padding:11px 13px;margin:10px 0;background:#fff;font-size:14px;line-height:1.5}
+.mid{text-align:center;color:var(--muted);font-size:13px;padding-top:15px}.mid div{margin:24px 0}
+.branch{display:grid;grid-template-columns:1fr 1fr;gap:14px}.branch .card{min-height:175px}
+.tag{display:inline-block;font-size:12px;padding:4px 8px;border-radius:999px;background:#eaf2ff;color:#235ccf;margin-bottom:8px}
+footer{margin-top:38px;color:var(--muted);font-size:13px;text-align:center}
+@media(max-width:900px){.flow,.grid,.pre,.branch{grid-template-columns:1fr}.timeline{grid-template-columns:1fr}.mid{display:none}h1{font-size:32px}}
 </style>
 </head>
 <body>
 <main>
 <section class="hero">
-<h1>计算机网络扫盲</h1>
-<div class="sub">不从七层模型死背，而是追踪一次真实 HTTPS 请求：名字怎么找到 IP，进程怎么得到 socket，SYN 怎么经过路由、ARP、NAT 到达服务器，TLS 又如何证明“对面真的是我要访问的网站”。</div>
-<div class="note"><b>当前主线假设：</b>HTTP/1.1 或 HTTP/2 over TCP + TLS 1.3。HTTP/3/QUIC 会在后续章节单独走另一条传输路径。</div>
-<div class="links"><a class="btn" href="./README.md">Markdown 总目录</a><a class="btn" href="./00-network-bootstrap.md">00 · 上网前置</a><a class="btn" href="./01-url-to-webpage.md">01 · URL 到网页</a><a class="btn" href="./PLAN.md">建设计划</a></div>
+  <div class="tag">network-beginner-roadmap</div>
+  <h1>计算机网络扫盲 · Visual Map</h1>
+  <p class="sub">从“电脑刚连上网络”开始，沿着一条真实 HTTPS 请求，看到 DNS、Socket、TCP、Route、ARP/NDP、NAT/PAT、TLS 和 HTTP 分别属于谁、为什么存在、前后如何衔接。</p>
+  <div class="notice"><b>主线假设：</b>先讲 HTTP/1.1 或 HTTP/2 over TCP + TLS 1.3。HTTP/3 使用 QUIC/UDP，后续单独展开。这里的示例公网 IP 使用 TEST-NET 文档地址，不代表真实网站。</div>
+  <div class="nav">
+    <a href="./README.md">Markdown 总入口</a>
+    <a href="./00-network-bootstrap.md">00 · 入网前置</a>
+    <a href="./01-url-to-webpage.md">01 · URL 到网页</a>
+    <a href="./PLAN.md">建设计划</a>
+    <a href="./SOURCES.md">参考资料</a>
+  </div>
 </section>
 
-<h2>一条请求的参与者泳道</h2>
-<div class="lanes">
+<h2>0 · URL 之前：电脑先获得网络参数</h2>
+<div class="pre">
+  <div class="kpi"><small>DHCP / 静态配置</small><strong>192.168.1.20</strong><p>“我在这个网络里是谁？”</p></div>
+  <div class="kpi"><small>Subnet</small><strong>192.168.1.0/24</strong><p>“谁和我属于同一直接网络？”</p></div>
+  <div class="kpi"><small>Default Gateway</small><strong>192.168.1.1</strong><p>“去外网第一跳交给谁？”</p></div>
+  <div class="kpi"><small>DNS Server</small><strong>Resolver</strong><p>“域名问题先问谁？”</p></div>
+</div>
+
+<h2>1 · 参与者泳道：不要把所有协议画在一根箭头上</h2>
+<div class="flow">
   <div class="lane"><h3>Browser / App</h3>
-    <div class="step blue">URL 解析<br>scheme / host / port / path</div><div class="arrow">↓</div>
-    <div class="step blue">DNS 请求意图</div><div class="arrow">↓</div>
-    <div class="step blue">地址排序 + Happy Eyeballs<br>启动多个错峰 connect 尝试</div><div class="arrow">↓</div>
-    <div class="step blue">TLS ClientHello<br>SNI / ALPN / key_share</div><div class="arrow">↓</div>
-    <div class="step blue">HTTP Request</div>
+    <div class="step blue">URL Parser<br>scheme / host / port / path</div><div class="arrow">↓</div>
+    <div class="step blue">名称解析请求<br>A / AAAA candidates</div><div class="arrow">↓</div>
+    <div class="step blue">Address Sorting<br>Happy Eyeballs</div><div class="arrow">↓</div>
+    <div class="step blue">TLS 1.3</div><div class="arrow">↓</div>
+    <div class="step blue">HTTP</div>
   </div>
-  <div class="lane"><h3>OS Kernel</h3>
-    <div class="step">Socket / 临时端口</div><div class="arrow">↓</div>
-    <div class="step">TCP SYN</div><div class="arrow">↓</div>
-    <div class="step">IP + Route</div><div class="arrow">↓</div>
-    <div class="step">ARP (IPv4) / NDP (IPv6)</div><div class="arrow">↓</div>
-    <div class="step">NIC Driver → NIC</div>
+  <div class="lane"><h3>Client OS Kernel</h3>
+    <div class="step">多个错峰 connect()</div><div class="arrow">↓</div>
+    <div class="step">Socket + 临时端口</div><div class="arrow">↓</div>
+    <div class="step">TCP SYN → IP</div><div class="arrow">↓</div>
+    <div class="step">Route</div><div class="arrow">↓</div>
+    <div class="step">ARP / NDP → NIC</div>
   </div>
   <div class="lane"><h3>Home Router</h3>
-    <div class="step orange">接收当前链路 Frame</div><div class="arrow">↓</div>
+    <div class="step orange">收到 LAN Frame</div><div class="arrow">↓</div>
     <div class="step orange">Routing / Conntrack</div><div class="arrow">↓</div>
-    <div class="step orange">NAT/PAT<br>私网连接 → 公网连接</div><div class="arrow">↓</div>
-    <div class="step orange">WAN 转发</div>
+    <div class="step orange">NAT/PAT<br>典型 IPv4 家庭网</div><div class="arrow">↓</div>
+    <div class="step orange">WAN Forward</div>
   </div>
   <div class="lane"><h3>Internet</h3>
-    <div class="step purple">ISP Router</div><div class="arrow">↓</div>
-    <div class="step purple">AS / BGP 路由信息</div><div class="arrow">↓</div>
-    <div class="step purple">逐跳 Forwarding</div>
+    <div class="step purple">ISP</div><div class="arrow">↓</div>
+    <div class="step purple">AS / BGP<br>控制面路由信息</div><div class="arrow">↓</div>
+    <div class="step purple">Router FIB<br>逐跳 Forwarding</div>
   </div>
-  <div class="lane"><h3>Server</h3>
-    <div class="step green">NIC → Kernel IP/TCP</div><div class="arrow">↓</div>
-    <div class="step green">443 LISTEN Socket</div><div class="arrow">↓</div>
-    <div class="step green">三次握手 → Connected Socket</div><div class="arrow">↓</div>
-    <div class="step green">TLS Certificate / Private Key</div><div class="arrow">↓</div>
-    <div class="step green">HTTP Handler</div>
+  <div class="lane"><h3>Server / Edge</h3>
+    <div class="step green">NIC → IP/TCP</div><div class="arrow">↓</div>
+    <div class="step green">443 LISTEN socket</div><div class="arrow">↓</div>
+    <div class="step green">Handshake → accept queue</div><div class="arrow">↓</div>
+    <div class="step green">Connected socket</div><div class="arrow">↓</div>
+    <div class="step green">TLS / HTTP Handler</div>
   </div>
 </div>
 
-<h2>必须记住的六个边界</h2>
-<div class="grid">
-<div class="card"><b>DNS ≠ 端口</b><p>DNS 主要把 hostname 解析成地址；443 通常来自 HTTPS scheme 或 URL 显式端口。</p></div>
-<div class="card"><b>Happy Eyeballs 包含 connect 尝试</b><p>不是先选完 IP 再 connect，而是排序后错峰启动候选连接，谁先成功用谁。</p></div>
-<div class="card"><b>Route 先于 ARP/NDP</b><p>先决定下一跳，再把“下一跳地址”解析成当前链路能使用的邻居地址。</p></div>
-<div class="card"><b>NAT/PAT 属于路由器</b><p>它处理已经存在的 IP/TCP 报文，不是客户端协议栈中 TCP 之前的一个步骤。</p></div>
-<div class="card"><b>CA 有两个时间轴</b><p>CA 事先签发证书；访问时浏览器主要在本地验证链和服务器私钥持有证明。</p></div>
-<div class="card"><b>HTTPS 不等于必须 TCP</b><p>本教程第一主线使用 HTTP/1.1/2；HTTP/3 走 QUIC/UDP，会单独展开。</p></div>
+<h2>2 · Happy Eyeballs 不是“先选 IP，再 connect”</h2>
+<div class="timeline">
+  <div class="col">
+    <h3>Browser</h3>
+    <div class="msg blue">DNS 得到 IPv6-A / IPv4-A / ...</div>
+    <div class="msg blue">地址排序</div>
+    <div class="msg blue">connect(IPv6-A, 443)</div>
+    <div class="msg blue">短延迟后 connect(IPv4-A, 443)</div>
+    <div class="msg green">采用先成功的 winning socket</div>
+  </div>
+  <div class="mid"><div>→</div><div>→</div><div>→</div><div>→</div></div>
+  <div class="col">
+    <h3>OS / Network Stack</h3>
+    <div class="msg">建立多个短时重叠的连接尝试</div>
+    <div class="msg">每个尝试都有自己的 socket/TCP 状态</div>
+    <div class="msg">某个候选先完成</div>
+    <div class="msg">其余未完成尝试取消</div>
+  </div>
 </div>
+
+<h2>3 · IPv4 / IPv6 从邻居解析开始分叉</h2>
+<div class="branch">
+  <div class="card"><span class="tag">IPv4</span><b>Route → ARP → 可能 NAT/PAT</b><p>先由路由表决定下一跳，再用 ARP 找当前 IPv4 邻居的 MAC。典型家庭 IPv4 出口常经过 NAPT/PAT。</p></div>
+  <div class="card"><span class="tag">IPv6</span><b>Route → NDP → IPv6 Routing</b><p>IPv6 不使用 ARP，而使用 Neighbor Discovery 等机制。不能把 IPv4 的 NAT/ARP 教学链机械复制过去。</p></div>
+</div>
+
+<h2>4 · NAT/PAT 的正确位置</h2>
+<div class="timeline">
+  <div class="col">
+    <h3>Laptop 已经产生的包</h3>
+    <div class="msg">TCP: 53124 → 443, SYN=1</div>
+    <div class="msg">IP: 192.168.1.20 → 203.0.113.20</div>
+    <div class="msg">Route → Gateway</div>
+    <div class="msg">ARP → Router MAC</div>
+    <div class="msg">Ethernet Frame 发给 Router</div>
+  </div>
+  <div class="mid"><div>→</div><div>→</div><div>→</div><div>→</div></div>
+  <div class="col">
+    <h3>Home Router</h3>
+    <div class="msg orange">收到 LAN Frame</div>
+    <div class="msg orange">Conntrack / Routing</div>
+    <div class="msg orange">192.168.1.20:53124 ↔ 198.51.100.8:62001</div>
+    <div class="msg orange">重算必要头部信息并从 WAN 转发</div>
+  </div>
+</div>
+
+<h2>5 · TLS 与 CA 必须看成两个时间轴</h2>
+<div class="branch">
+  <div class="card">
+    <span class="tag">网站部署前</span>
+    <b>Site → CA → Certificate</b>
+    <p>CA 验证域名控制权并签发证书。服务器提前部署证书、Intermediate 证书和对应私钥；Root CA 信任锚由 OS/Browser 预置或管理。</p>
+  </div>
+  <div class="card">
+    <span class="tag">用户访问时</span>
+    <b>Browser ↔ Server</b>
+    <p>ClientHello / ServerHello / ECDHE / Certificate / CertificateVerify / Finished。浏览器在本地验链和验证服务器私钥持有证明，不是每次实时找 CA“批准”。</p>
+  </div>
+</div>
+
+<h2>6 · 这套课程最重要的边界</h2>
+<div class="grid">
+  <div class="card"><b>DNS ≠ Port</b><p>DNS 主要给地址记录；443 通常来自 HTTPS scheme 或 URL 显式端口。</p></div>
+  <div class="card"><b>Route → ARP/NDP</b><p>先决定下一跳，再解析当前链路邻居；ARP 不是永远查默认网关。</p></div>
+  <div class="card"><b>TCP SYN 已经存在</b><p>Route、ARP、NAT、互联网路由是在运输 SYN，而不是全部做完以后才“开始 TCP”。</p></div>
+  <div class="card"><b>NAT/PAT 属于 Router</b><p>它处理已经存在的 IP/transport 报文，并维护状态映射。</p></div>
+  <div class="card"><b>两类“公钥”不要混</b><p>ECDHE 临时 key share 用于协商秘密；证书身份公钥用于验证 CertificateVerify 等身份签名。</p></div>
+  <div class="card"><b>HTTPS ≠ 永远 TCP</b><p>HTTP/1.1/2 常见主线是 TCP+TLS；HTTP/3 是 QUIC/UDP。</p></div>
+</div>
+
+<footer>详细正文以 README.md、00-network-bootstrap.md、01-url-to-webpage.md 为准；HTML 只做视觉导航和总览。</footer>
 </main>
 </body>
 </html>
