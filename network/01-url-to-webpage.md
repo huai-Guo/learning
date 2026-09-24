@@ -1,461 +1,502 @@
-# 01｜从输入 URL 到网页返回：先把整条链串起来
+# 01｜从输入 URL 到网页返回：一条 HTTPS 请求到底经历了什么？
 
-> 这一章只解决一个问题：
->
-> **在浏览器输入 `https://shop.example.com/products` 后，为什么另一个网络里的服务器最终能把页面返回给我？**
+> 这一章是整个网络目录的“母图章节”。  
+> 后续每一章只是把这里的一个框放大。
 
-这章是整个目录的“地图”。后面的 DNS、IP、TCP、TLS、HTTP 都会再单独深入，但先把它们放回正确的因果顺序。
+本章先使用一个明确假设：
 
----
+> **浏览器最终使用 HTTP/1.1 或 HTTP/2 over TCP + TLS 1.3。**
 
-## 0. 先看全局：不要把协议背成互不相关的名词
+HTTP/3 不走 TCP，它使用 QUIC/UDP，会在后续章节单独展开。
 
-```text
-用户输入 URL
-https://shop.example.com/products
-        │
-        ▼
-① URL 解析
-        │
-        ├─ scheme = https
-        ├─ host   = shop.example.com
-        ├─ port   = 443（默认）
-        └─ path   = /products
-        │
-        ▼
-② DNS：名字 → 地址候选
-        │
-        ├─ A     → IPv4
-        └─ AAAA  → IPv6
-        │
-        ▼
-③ 地址排序 + Happy Eyeballs
-        │
-        ▼
-假设选中 203.0.113.20:443
-        │
-        ▼
-④ socket() / connect()
-        │
-        ├─ OS 创建内核 socket
-        └─ 分配客户端临时端口 53124
-        │
-        ▼
-⑤ TCP 生成 SYN
-        │
-        ▼
-⑥ IP：dst = 203.0.113.20
-        │
-        ▼
-⑦ Route：这包下一跳给谁？
-        │
-        └─ next hop = 192.168.1.1
-        │
-        ▼
-⑧ ARP：192.168.1.1 的 MAC 是谁？
-        │
-        ▼
-⑨ Ethernet：发给默认网关 MAC
-        │
-        ▼
-⑩ 家庭路由器 NAT/PAT
-        │
-        ├─ 192.168.1.20:53124
-        │        ↓
-        └─ 198.51.100.8:62001
-        │
-        ▼
-⑪ Internet Routing
-        │
-        ▼
-目标服务器 203.0.113.20:443
-        │
-        │ SYN / SYN-ACK / ACK
-        ▼
-⑫ TCP ESTABLISHED
-        │
-        ▼
-⑬ TLS 1.3
-        │
-        ├─ ClientHello：SNI / ALPN / key_share
-        ├─ ServerHello
-        ├─ ECDHE 派生密钥
-        ├─ Certificate
-        ├─ CertificateVerify
-        ├─ 浏览器验证证书链
-        └─ Finished
-        │
-        ▼
-⑭ HTTP Request
-        │
-        ▼
-⑮ HTTP Response
-        │
-        ▼
-浏览器解析 HTML / CSS / JS 并继续请求资源
-```
-
-先记住一个重要修正：
-
-> Route、ARP、NAT、互联网路由并不是“TCP 之前才做完的准备工作”。  
-> 当浏览器调用 `connect()` 后，客户端已经要发出 TCP SYN；这些网络机制是在**把这个 SYN 运送到服务器**。
+另外，文中的 203.0.113.0/24、198.51.100.0/24 等地址是专门用于文档示例的 TEST-NET 地址，不代表真实网站。
 
 ---
 
-# 1. URL：浏览器先确定“我要访问谁、用什么协议、要什么资源”
+# 0. 先看参与者：不要把所有步骤塞进一根箭头
+
+一次访问至少横跨这些角色：
+
+~~~mermaid
+flowchart LR
+    B["Browser / App"]
+    K["本机 OS Kernel"]
+    NIC["本机 NIC"]
+    R["家庭 Router"]
+    I["ISP / Internet"]
+    SN["Server Network"]
+    SK["Server Kernel"]
+    SP["Server Process / TLS / HTTP"]
+    DNS["DNS System"]
+    CA["CA / Trust PKI"]
+
+    B -->|"名称解析请求"| DNS
+    DNS -->|"A / AAAA"| B
+    B -->|"socket / connect"| K
+    K --> NIC
+    NIC --> R
+    R --> I --> SN --> SK --> SP
+    SP -->|"response"| SK
+    SK --> SN --> I --> R --> NIC --> K --> B
+    CA -. "事先签发证书 / Trust Anchor" .-> SP
+    CA -. "Root CA 预置信任" .-> B
+~~~
+
+这张图回答的是：
+
+> **“谁在做事？”**
+
+而下面的封装图回答的是另一件事：
+
+~~~text
+HTTP
+ ↓
+TLS
+ ↓
+TCP
+ ↓
+IP
+ ↓
+Ethernet / Wi-Fi
+~~~
+
+不要把“协议层次”和“设备经过顺序”混成同一种图。
+
+---
+
+# 1. URL：浏览器先确定“我要谁、用什么协议、要什么资源”
 
 输入：
 
-```text
+~~~text
 https://shop.example.com/products?lang=zh-CN#reviews
-```
+~~~
 
 可以拆成：
 
-```text
-https:// shop.example.com :443 /products ?lang=zh-CN #reviews
-│        │                 │    │         │           │
-scheme   hostname          port path      query       fragment
-```
+~~~text
+https://  shop.example.com  :443  /products  ?lang=zh-CN  #reviews
+│         │                  │     │          │            │
+scheme    hostname           port  path       query        fragment
+~~~
 
-其中：
+浏览器此时已经能知道：
 
-- `https`：决定协议语义，也给出默认端口 `443`；
-- `shop.example.com`：hostname，后面需要解析成 IP；
-- `443`：如果 URL 没显式写，HTTPS 使用默认值；
-- `/products`：HTTP 请求路径；
-- `query`：通常会进入 HTTP 请求；
-- `fragment`：通常由浏览器本地处理，不随普通 HTTP 请求发给服务器。
-
-所以浏览器在 DNS 前其实已经知道：
-
-```text
+~~~text
+scheme   = https
 hostname = shop.example.com
-port     = 443
-```
+port     = 443        ← URL 没显式写时，由 HTTPS 默认值确定
+path     = /products
+query    = lang=zh-CN
+fragment = reviews
+~~~
 
-它缺的是：
+关键点：
 
-```text
-IP = ?
-```
+- DNS 通常负责 hostname → 地址；
+- 443 通常不是 DNS 查出来的；
+- fragment 通常只在浏览器本地使用，不随普通 HTTP 请求发给服务器。
 
-**DNS 通常不是用来告诉浏览器“443”的。**
+浏览器已经知道“请求意图”：
+
+~~~text
+目标站点：shop.example.com
+目标资源：/products?lang=zh-CN
+协议：HTTPS
+~~~
+
+但现在还不能真正把 HTTP 数据发出去，因为：
+
+~~~text
+shop.example.com
+~~~
+
+还只是一个名字。
 
 ---
 
-# 2. DNS：把人类使用的名字变成网络可以使用的地址
+# 2. DNS：把 hostname 变成地址候选
 
-## 2.1 Stub Resolver 到底是什么
+## 2.1 先把 Stub Resolver 换成人话
 
-不要把 Stub Resolver 想成另一台 DNS 服务器。
+第一遍学习时，可以先记：
 
-它更适合记成：
+> **本机名称解析系统 = 应用向外部 DNS 世界提问的入口。**
 
-> **本机轻量 DNS 客户端 / 名称解析入口。**
+Stub Resolver 是这个入口中的一个经典角色称呼，不必把它想成某个固定的独立进程。
 
-概念流程：
+典型模型：
 
-```text
-Chrome
-  │
-  │ “帮我解析 shop.example.com”
-  ▼
-本机名称解析系统（Stub Resolver 角色）
-  │
-  ├─ 本地配置 / hosts
-  ├─ OS DNS Cache
-  │
-  └─ 本地没有
-        │
-        ▼
-通过网络询问 Recursive Resolver
-```
+~~~mermaid
+flowchart LR
+    A["Browser"]
+    L["本机名称解析系统<br/>browser / OS resolver policy"]
+    H["hosts / local config"]
+    C["OS / Browser Cache"]
+    R["Recursive Resolver"]
+    D["Root → TLD → Authoritative"]
 
-不同浏览器和操作系统实现可能不同；现代浏览器还可能使用自己的解析器或 DoH。这里先掌握角色关系。
+    A --> L
+    L --> H
+    L --> C
+    L -->|"本地无答案"| R
+    R -->|"resolver cache miss"| D
+~~~
 
-## 2.2 缓存可能在哪里
+不同浏览器、Windows/Linux/macOS、DoH 配置下，具体顺序和实现可能不同。这里先抓角色，不把一种实现写成所有机器的固定顺序。
 
-不是只有一个“DNS Cache”。
+## 2.2 hosts 与 Cache 不是一回事
 
-常见层次：
+hosts：
 
-```text
-Browser 自己的缓存
-        ↓
-OS DNS Cache
-        ↓
-本地网络设备可能存在的缓存/转发
-        ↓
-Recursive Resolver Cache
-        ↓
-真正查询 DNS 层级
-```
+~~~text
+127.0.0.1      shop.test
+192.168.1.50   api.dev.test
+~~~
 
-缓存的本质是 DNS Resource Record，例如：
+本质是：
 
-```text
+> 本机静态 hostname → IP 映射。
+
+Windows 常见路径：
+
+~~~text
+C:\Windows\System32\drivers\etc\hosts
+~~~
+
+DNS Cache 则是：
+
+> 以前查询到的 DNS Resource Record 临时保存。
+
+例如：
+
+~~~text
 name  = shop.example.com
 type  = A
 value = 203.0.113.20
 TTL   = 300
-```
+~~~
 
-TTL 表示这条记录可以缓存多久。
+TTL 到期后，缓存不能永远继续当作当前答案。
 
-## 2.3 hosts 是什么
+## 2.3 Recursive Resolver 真正替客户端“查到底”
 
-Windows 常见路径：
+如果递归解析器也没缓存：
 
-```text
-C:\Windows\System32\drivers\etc\hosts
-```
-
-例如：
-
-```text
-127.0.0.1    shop.test
-192.168.1.50 api.dev.test
-```
-
-hosts 是：
-
-> **本机人工维护的 hostname → IP 静态映射。**
-
-它不是普通 DNS Cache，也不能写：
-
-```text
-1.2.3.4:8080 test.com
-```
-
-因为 hosts 解决的是 hostname → IP，不负责端口。
-
-## 2.4 Recursive Resolver 才是替你“查到底”的角色
-
-如果本地没有：
-
-```text
-Laptop
-   │
-   │ DNS Query
-   ▼
+~~~text
 Recursive Resolver
-   │
-   ├─ 自己缓存里有 → 直接返回
-   │
-   └─ 没有
-        ↓
-       Root
-        ↓ “.com 去问这些服务器”
-     .com TLD
-        ↓ “example.com 去问它的权威 DNS”
-Authoritative DNS
-        ↓
-A / AAAA 最终记录
-```
+      │
+      │ “shop.example.com 在哪？”
+      ▼
+Root
+      │
+      │ “.com 去问这些 TLD Server”
+      ▼
+.com TLD
+      │
+      │ “example.com 去问这些权威 DNS”
+      ▼
+example.com Authoritative DNS
+      │
+      ▼
+A / AAAA / CNAME ...
+~~~
 
-Root 和 TLD 更多是在**指路**。
+注意：
 
-Authoritative DNS 才是某个域名区域记录的权威来源。
-
----
-
-# 3. A / AAAA 与 Happy Eyeballs：DNS 可能给你不止一个 IP
-
-DNS 可能返回：
-
-```text
-A     → 203.0.113.20
-AAAA  → 2001:db8::20
-```
-
-其中：
-
-- A = IPv4；
-- AAAA = IPv6。
-
-客户端会先根据地址选择策略得到候选顺序，再使用类似 Happy Eyeballs 的策略避免“IPv6 看起来可用但实际很慢”导致长时间等待。
-
-它不是：
-
-```text
-所有地址一次性无限并发 connect()
-```
-
-更接近：
-
-```text
-IPv6-A  ───────────────► 尝试
-            │
-            │ 短延迟后仍未成功
-            ▼
-IPv4-A      ───────────► 加入竞争
-                 │
-                 ├─ 谁先成功就采用谁
-                 └─ 其他尝试取消
-```
-
-假设最终：
-
-```text
-203.0.113.20
-```
-
-胜出。
-
-再加上 URL 中已经确定的：
-
-```text
-port = 443
-```
-
-最终远端目标是：
-
-```text
-203.0.113.20:443
-```
+- Root 主要负责顶层指路；
+- TLD 继续指向域的权威 DNS；
+- Authoritative DNS 才是这个 DNS zone 的权威记录来源；
+- 现实中缓存命中很普遍，并不是每次请求都真的走完整 Root → TLD → Authoritative。
 
 ---
 
-# 4. socket 与临时端口：端口不是“进程自己暴露的一根线”
+# 3. DNS 返回的可能不是一个 IP
 
-浏览器的网络组件会调用类似：
+假设结果中有：
 
-```text
-socket()
-connect(203.0.113.20, 443)
-```
+~~~text
+A     shop.example.com → 203.0.113.20
+AAAA  shop.example.com → 2001:db8::20
+~~~
 
-概念关系：
+所以现在不是：
 
-```text
-浏览器进程
-    │
-    │ fd / socket handle
-    ▼
-内核 Socket Object
-    │
-    ├─ local IP
-    ├─ local port
-    ├─ remote IP
-    ├─ remote port
-    └─ TCP state
-```
+~~~text
+“DNS 给我一个 IP”
+~~~
 
-客户端如果没有主动指定本地端口，OS 通常会分配临时端口，例如：
+而更接近：
 
-```text
-local  = 192.168.1.20:53124
-remote = 203.0.113.20:443
-```
+~~~text
+“DNS 给我一组候选地址”
+~~~
 
-因此不是：
+客户端还要决定：
 
-```text
-Chrome 一个进程固定占一个端口
-```
+> 哪个地址现在真的最适合建立连接？
+
+---
+
+# 4. 地址排序 + Happy Eyeballs：它本身就包含 connect 尝试
+
+这里要特别纠正一个常见错误：
+
+错误：
+
+~~~text
+地址排序
+ ↓
+Happy Eyeballs 先选出最终 IP
+ ↓
+socket/connect
+~~~
+
+更准确的是：
+
+~~~mermaid
+sequenceDiagram
+    participant B as Browser
+    participant K as OS / Network Stack
+    B->>B: 对 A / AAAA 候选排序
+    B->>K: connect(IPv6-A, 443)
+    Note over B,K: 短延迟后仍未成功
+    B->>K: connect(IPv4-A, 443)
+    Note over B,K: 多个连接尝试可以短时间重叠
+    K-->>B: IPv4-A 先成功
+    B->>K: 采用 winning socket
+    B->>K: 取消其余未完成尝试
+~~~
+
+所以 Happy Eyeballs 的核心不是：
+
+> “无限同时连接所有 IP。”
 
 而是：
 
-```text
+> **候选地址排序后，错峰启动多个连接尝试，让不同地址族尽快获得竞争机会。**
+
+假设最终 IPv4：
+
+~~~text
+203.0.113.20:443
+~~~
+
+先成功。
+
+从这里开始，本章进入 **IPv4 主分支**。
+
+---
+
+# 5. IPv4 与 IPv6 从这里开始出现不同的邻居解析逻辑
+
+整体：
+
+~~~mermaid
+flowchart TD
+    H["Happy Eyeballs winning connection"]
+    V4["IPv4 胜出"]
+    V6["IPv6 胜出"]
+    R4["Route"]
+    A["ARP<br/>解析 IPv4 下一跳 MAC"]
+    N["典型家庭 IPv4 可能经过 NAT/PAT"]
+    R6["Route"]
+    NDP["NDP / Neighbor Discovery"]
+    I6["IPv6 Routing"]
+
+    H --> V4 --> R4 --> A --> N
+    H --> V6 --> R6 --> NDP --> I6
+~~~
+
+因此：
+
+> **ARP 不是 IPv6 的邻居解析协议。**
+
+后面主线为了讲清 NAT/PAT，继续使用 IPv4 分支。
+
+---
+
+# 6. socket 与临时端口：真正属于内核的是 Socket Object
+
+浏览器网络组件请求：
+
+~~~text
+socket()
+connect(203.0.113.20, 443)
+~~~
+
+概念关系：
+
+~~~text
+Browser Process
+     │
+     │ fd / socket handle
+     ▼
+Kernel Socket Object
+     │
+     ├─ local IP
+     ├─ local port
+     ├─ remote IP
+     ├─ remote port
+     ├─ send/receive buffers
+     └─ TCP state
+~~~
+
+如果客户端没指定本地端口，OS 通常会选择一个临时端口：
+
+~~~text
+local  = 192.168.1.20:53124
+remote = 203.0.113.20:443
+~~~
+
+所以不是：
+
+~~~text
+一个 Chrome 进程 = 一个端口
+~~~
+
+而是：
+
+~~~text
 一个进程
   ↓
 可以持有很多 fd / socket
   ↓
-每条连接都有自己的地址与状态
-```
+每条 TCP 连接有自己的连接状态
+~~~
 
-TCP 连接常用四元组区分：
+TCP 连接常用四元组描述：
 
-```text
+~~~text
 源 IP
 源端口
-目标 IP
-目标端口
-```
+目的 IP
+目的端口
+~~~
 
 ---
 
-# 5. TCP SYN 已经产生，接下来 Route / ARP 是在帮它出门
+# 7. connect() 之后，第一个 TCP SYN 已经开始产生
 
-客户端准备第一个 TCP 握手报文：
+这是整条链最容易被画错的地方。
 
-```text
+客户端内核准备：
+
+~~~text
 TCP Header
 ────────────────
 src port = 53124
 dst port = 443
-SYN = 1
+SYN      = 1
 
 IP Header
 ────────────────
 src IP = 192.168.1.20
 dst IP = 203.0.113.20
-```
+~~~
 
-现在有一个问题：
+此时 TCP SYN 已经存在。
 
-> 网卡第一跳究竟把这个 IP 包交给谁？
+后面的：
+
+~~~text
+Route
+ARP
+Ethernet
+NAT/PAT
+Internet Routing
+~~~
+
+都是在想办法：
+
+> **把这个 TCP SYN 真正运输到目标。**
+
+不是“这些全部完成后才开始 TCP”。
 
 ---
 
-# 6. Route：先决定下一跳是谁
+# 8. Route：先决定下一跳
 
-OS 查本机路由表。
+本机先查路由表。
 
 例如：
 
-```text
-192.168.1.0/24   直接连接
-0.0.0.0/0        via 192.168.1.1
-```
+~~~text
+192.168.1.0/24    directly connected
+0.0.0.0/0         via 192.168.1.1
+~~~
 
 目标：
 
-```text
+~~~text
 203.0.113.20
-```
+~~~
 
-不属于本地 `192.168.1.0/24`，于是使用默认路由：
+不在本地网段，于是：
 
-```text
+~~~text
 next hop = 192.168.1.1
-```
+~~~
 
-因此必须区分：
+必须区分：
 
-```text
-最终目标：
+~~~text
+最终目标 IP：
 203.0.113.20
 
 当前下一跳：
 192.168.1.1
-```
+~~~
+
+## 8.1 如果目标就在本地子网呢？
+
+假如：
+
+~~~text
+本机   192.168.1.20/24
+目标   192.168.1.50
+~~~
+
+那么：
+
+~~~text
+Route
+ ↓
+目标属于本地直连网段
+ ↓
+下一跳就是 192.168.1.50 本身
+~~~
+
+因此：
+
+> **ARP 不是永远找默认网关。ARP 找的是当前 IPv4 下一跳。**
 
 ---
 
-# 7. ARP：知道下一跳 IP 后，再找下一跳 MAC
+# 9. ARP：把“下一跳 IPv4”变成当前以太网需要的 MAC
 
-在 IPv4 Ethernet 场景中，当前链路发帧需要目标 MAC。
+当前例子中：
 
-所以才进行：
+~~~text
+next hop = 192.168.1.1
+~~~
 
-```text
+如果 ARP/neighbor cache 没有答案，就需要在当前广播域询问：
+
+~~~text
 “谁是 192.168.1.1？”
-```
+~~~
 
-ARP 请求通常在当前广播域广播。
+得到：
 
-假设得到：
-
-```text
+~~~text
 192.168.1.1
 → AA:BB:CC:DD:EE:FF
-```
+~~~
 
-于是第一跳可以构造：
+于是这一跳的 Frame 可以形成：
 
-```text
+~~~text
 Ethernet
 ────────────────
 src MAC = Laptop MAC
@@ -470,493 +511,650 @@ TCP
 ────────────────
 src port = 53124
 dst port = 443
-SYN = 1
-```
+SYN      = 1
+~~~
 
 一句话：
 
-```text
+~~~text
 Route：
-最终 IP → 下一跳 IP
+目标 IP → 下一跳
 
 ARP：
-下一跳 IPv4 → 下一跳 MAC
-```
-
-**ARP 不是去找远端服务器的 MAC。**
+IPv4 下一跳 → 下一跳 MAC
+~~~
 
 ---
 
-# 8. NAT/PAT：路由器把“私网连接”映射成“公网连接”
+# 10. 包离开 Laptop，进入家庭路由器
 
-家庭路由器收到第一跳 Ethernet Frame 后，会处理其中的 IP/TCP 报文。
+这里必须画参与者边界：
 
-出站前可能建立一次状态化映射：
+~~~text
+┌──────────── Laptop ────────────┐
 
-```text
-转换前：
+TCP SYN
+  ↓
+IP
+  ↓
+Route
+  ↓
+ARP
+  ↓
+Ethernet Frame
 
+└──────────────┬─────────────────┘
+               │
+               ▼
+┌────────── Home Router ─────────┐
+
+LAN 口收到 Frame
+  ↓
+处理 IP 包
+  ↓
+Routing / Conntrack
+  ↓
+可能执行 NAT/PAT
+  ↓
+选择 WAN 出口
+  ↓
+构造下一链路发送形式
+
+└──────────────┬─────────────────┘
+               ▼
+            Internet
+~~~
+
+所以 NAT/PAT 不是：
+
+> “Browser 或 Laptop 在 TCP 之前执行的步骤。”
+
+它属于中间路由/NAT 设备处理已经存在的包。
+
+---
+
+# 11. NAT/PAT：一次状态化连接映射
+
+原始连接：
+
+~~~text
 192.168.1.20:53124
         →
 203.0.113.20:443
+~~~
 
+典型家庭 IPv4 NAPT/PAT 可能建立：
 
-NAT/PAT 映射：
-
+~~~text
+inside:
 192.168.1.20:53124
+
         ↕
+
+outside:
 198.51.100.8:62001
+~~~
 
+然后公网侧看到：
 
-转换后：
-
+~~~text
 198.51.100.8:62001
         →
 203.0.113.20:443
-```
+~~~
 
-这里不要机械理解为：
+不要机械画成：
 
-```text
-先经过一个 NAT 步骤
-↓
-再经过一个 PAT 步骤
-```
+~~~text
+NAT
+ ↓
+PAT
+~~~
 
-家用场景更常见的理解是 NAPT/PAT：
+更准确是：
 
-> 在同一次连接映射中，同时可能重写源 IP 和源端口。
+> **同一次连接映射里，设备可能同时重写源地址和源端口。**
 
-而且 PAT 不保证每次都必须修改源端口；如果能够安全保留，也可能保留原端口。
+而且端口不一定每次都必须变化，具体映射取决于 NAT 实现和当前映射冲突情况。
 
-为什么要使用端口映射？
+## 11.1 为什么 PAT 有价值
 
-因为很多内网设备：
+私网中：
 
-```text
+~~~text
 192.168.1.10:50000
 192.168.1.20:50000
-192.168.1.30:50000
-```
+~~~
 
-都可能共享：
+并不天然冲突，因为源 IP 不同。
 
-```text
-198.51.100.8
-```
+但它们都共享一个公网 IP 后，如果公网表示完全相同：
 
-公网侧需要继续区分这些连接，所以可以映射成：
+~~~text
+198.51.100.8:50000
+~~~
 
-```text
-198.51.100.8:62001
-198.51.100.8:62002
-198.51.100.8:62003
-```
+设备就难以维持不同连接的映射。
 
-PAT 不是用来修补“私网 TCP 自己会冲突”的问题。
+于是可以：
+
+~~~text
+192.168.1.10:50000 → 198.51.100.8:62001
+192.168.1.20:50000 → 198.51.100.8:62002
+~~~
+
+PAT 的核心是：
+
+> **让多个内部连接共享有限公网地址时仍能被区分和反向映射。**
 
 ---
 
-# 9. Internet Routing：之后是一跳一跳把 IP 包送向目标网络
+# 12. Internet Routing：目标 IP 让包逐跳靠近目标网络
 
-公网侧：
+公网包大致：
 
-```text
-198.51.100.8:62001
-        →
-203.0.113.20:443
-```
+~~~text
+src = 198.51.100.8
+dst = 203.0.113.20
+~~~
 
-可能经历：
+路径可能：
 
-```text
-家庭 Router
-    ↓
-ISP 接入路由器
-    ↓
-运营商骨干
-    ↓
+~~~text
+Home Router
+   ↓
+ISP Access Router
+   ↓
+ISP Core
+   ↓
 其他 AS
-    ↓
+   ↓
 目标网络
-    ↓
-203.0.113.20
-```
+   ↓
+Server / Edge
+~~~
 
-BGP 的核心角色可以先记成：
+BGP 可以先记成：
 
-> 大型自治系统之间传播“哪些 IP 前缀可以从哪里到达”的路由信息。
+> **自治系统之间传播“哪些 IP 前缀通过哪里可以到达”的路由信息。**
 
-真正的数据包转发时，路由器通常基于已经形成的转发表决定下一跳。
+真正某个数据包到了路由器时，核心动作更接近：
 
-每经过一个 L2 链路：
+~~~text
+读取 dst IP
+   ↓
+查本地转发表 / FIB
+   ↓
+确定下一跳和出接口
+   ↓
+继续转发
+~~~
 
-```text
-MAC Header 会变化
-```
-
-而：
-
-```text
-最终目标 IP 通常仍然指向 203.0.113.20
-```
-
-NAT 是“源 IP 可能变化”的典型例外。
+MAC/L2 头是逐链路的；跨路由后会重新形成下一段链路所需的 L2 信息。
 
 ---
 
-# 10. TCP 三次握手：前面的 Route / ARP / NAT 都是在搬运这些 TCP 报文
+# 13. 服务端：443 不是“一个抽象号码”，它对应内核里的监听状态
 
-正确时序：
+包到达 Server 后：
 
-```text
-Client                                      Server
-  │                                            │
-  │ SYN                                        │
-  ├───────────────────────────────────────────►│
-  │   中间经过 Route / ARP / NAT / Internet   │
-  │                                            │
-  │ SYN + ACK                                  │
-  │◄───────────────────────────────────────────┤
-  │                                            │
-  │ ACK                                        │
-  ├───────────────────────────────────────────►│
-  │                                            │
-  │              ESTABLISHED                   │
-```
+~~~mermaid
+flowchart TD
+    N["Server NIC"]
+    IP["Kernel IP"]
+    TCP["Kernel TCP"]
+    L["443 LISTEN Socket"]
+    SYNQ["SYN / 半连接状态"]
+    AQ["Accept Queue"]
+    A["accept()"]
+    C["Connected Socket"]
+    P["Nginx / Server Process"]
 
-所以不能画成：
+    N --> IP --> TCP --> L --> SYNQ
+    SYNQ -->|"三次握手完成"| AQ
+    AQ --> A --> C --> P
+~~~
 
-```text
-NAT
-↓
-Internet
-↓
-TCP 才开始
-```
+服务端程序事先做了类似：
 
-真正是：
+~~~text
+socket()
+bind(..., 443)
+listen()
+~~~
 
-```text
+于是内核知道：
+
+> 发给本机 TCP 443 的新连接请求，可以匹配这个 LISTEN socket。
+
+三次握手完成后，内核维护一条已建立连接；服务端程序通过 accept() 获得一个用于这条连接的 connected socket。
+
+真实生产环境里，443 可能终止在 CDN、负载均衡器、Nginx 或网关，而不是最终业务进程；后端拓扑章节会再展开。
+
+---
+
+# 14. TCP 三次握手：Route/ARP/NAT 一直在搬运这些报文
+
+~~~mermaid
+sequenceDiagram
+    participant C as Client Kernel
+    participant R as Router / Internet
+    participant S as Server Kernel
+
+    C->>R: SYN
+    R->>S: 转发后的 SYN
+    S->>R: SYN + ACK
+    R->>C: 返回 SYN + ACK
+    C->>R: ACK
+    R->>S: 转发后的 ACK
+    Note over C,S: TCP ESTABLISHED
+~~~
+
+所以：
+
+~~~text
 TCP SYN
-↓
-通过网络被运过去
-↓
-Server 收到
-```
+  ↓
+Route / ARP / NAT / Internet
+  ↓
+Server
+~~~
+
+而不是：
+
+~~~text
+Route / NAT 全部结束
+  ↓
+TCP 才开始
+~~~
 
 ---
 
-# 11. TLS 与 CA：必须分成两个时间轴
+# 15. TLS 与 CA：一定要分两个时间轴
 
-## 11.1 时间轴 A：网站上线前，CA 事先签发证书
+## 15.1 时间轴 A：用户访问网站之前，证书已经签发
 
-```text
-网站运营方
-    │
-    │ 生成/准备服务器密钥材料
-    ▼
-申请证书
-    │
-    ▼
-CA 验证域名控制权
-    │
-    ▼
-CA / Intermediate CA 签发
-    │
-    ▼
-Server Certificate
-```
+~~~mermaid
+sequenceDiagram
+    participant Site as 网站运营方
+    participant CA as CA / Intermediate CA
+    participant Server as Server
+    participant Trust as Browser / OS Trust Store
 
-服务器提前保存：
+    Site->>CA: 申请证书 + 域名控制验证
+    CA-->>Site: 签发 Server Certificate
+    Site->>Server: 部署 Certificate + Private Key
+    CA-->>Trust: Root CA 通过系统/浏览器机制预置信任
+~~~
 
-```text
+所以 CA 不是：
+
+~~~text
+每次用户打开网站
+↓
+浏览器实时问：
+“CA，这网站今天能访问吗？”
+~~~
+
+吊销检查、OCSP/CRL 等属于额外机制，后续 TLS 章节再展开。
+
+---
+
+# 16. TLS 1.3：密钥协商与身份认证是两条不同逻辑
+
+先记住两类密钥材料。
+
+## 16.1 ECDHE 临时 key share
+
+解决：
+
+> **这一次连接如何建立共享秘密并派生对称密钥？**
+
+~~~text
+Client ephemeral key_share
+            +
+Server ephemeral key_share
+            ↓
+ECDHE Shared Secret
+            ↓
+HKDF 等派生
+            ↓
+Handshake / Application Traffic Keys
+~~~
+
+## 16.2 证书中的身份公钥
+
+解决：
+
+> **对面是否真的持有这个证书对应的私钥？**
+
+~~~text
 Server Private Key
-Server Certificate
-Intermediate Certificate(s)
-```
+        │
+        │ 签名 handshake transcript
+        ▼
+CertificateVerify
+        │
+        │ Browser 用证书中的 Server Public Key 验证
+        ▼
+证明服务器持有对应私钥
+~~~
 
-而浏览器 / OS 的 Trust Store 里提前存在受信任 Root CA。
+不要把：
 
-所以 CA 一般不是：
+~~~text
+ECDHE key_share
+~~~
 
-```text
-每次用户访问网站
-→ 浏览器实时问 CA“这个服务器能不能放行？”
-```
+和：
 
-吊销检查（OCSP/CRL 等）属于额外机制，后续章节再展开。
+~~~text
+Certificate Public Key
+~~~
 
-## 11.2 时间轴 B：真正建立 TLS 1.3 连接
+混成同一个“服务器公钥”。
 
-TCP 建立后：
+---
 
-```text
-Browser                                      Server
-   │                                            │
-   │ ① ClientHello                              │
-   │───────────────────────────────────────────►│
-   │ TLS 版本                                   │
-   │ cipher suites                              │
-   │ SNI = shop.example.com                     │
-   │ ALPN = h2, http/1.1                        │
-   │ key_share = Client ECDHE Public Key        │
-   │                                            │
-   │ ② ServerHello                              │
-   │◄───────────────────────────────────────────│
-   │ selected version / cipher                  │
-   │ Server ECDHE Public Key                    │
-   │                                            │
-   │ 双方通过 ECDHE 派生共享密钥材料             │
-   │                                            │
-   │ ③ EncryptedExtensions                      │
-   │◄───────────────────────────────────────────│
-   │                                            │
-   │ ④ Certificate                              │
-   │◄───────────────────────────────────────────│
-   │ Server Cert + Intermediate Cert(s)         │
-   │                                            │
-   │ ⑤ CertificateVerify                        │
-   │◄───────────────────────────────────────────│
-   │ Server 用证书对应私钥签握手 transcript      │
-   │ Browser 用证书公钥验证                      │
-   │                                            │
-   │ ⑥ Finished                                 │
-   │◄───────────────────────────────────────────│
-   │                                            │
-   │ ⑦ Browser 本地验证证书链并发送 Finished     │
-   │───────────────────────────────────────────►│
-   │                                            │
-   │          TLS secure channel                │
-```
+# 17. TLS 1.3 运行时流程
 
-## 11.3 SNI 是干什么的
+~~~mermaid
+sequenceDiagram
+    participant B as Browser
+    participant S as Server
 
-很多域名可以共享：
+    B->>S: ClientHello<br/>versions / cipher_suites / SNI / ALPN / key_share
+    S-->>B: ServerHello<br/>selected version / cipher / server key_share
+    Note over B,S: 双方可基于 ECDHE 派生握手密钥
+    S-->>B: EncryptedExtensions
+    S-->>B: Certificate
+    S-->>B: CertificateVerify
+    S-->>B: Finished
+    Note over B: 验证 hostname/SAN、有效期、证书链<br/>CertificateVerify、Server Finished
+    B->>S: Finished
+    Note over B,S: TLS 1.3 secure channel established
+~~~
 
-```text
-同一个 IP:443
-```
+这里要注意：
 
-所以服务器在 TLS 握手早期需要知道：
+> Browser 不是“等 Server Finished 到了之后才突然开始想起验链”。
 
-```text
-你到底访问哪个 hostname？
-```
+更准确地说，它在处理服务器这组握手消息时，完成证书链、服务器私钥持有证明和握手完整性验证；通过后才发送客户端 Finished。
+
+---
+
+# 18. SNI 和 ALPN 分别解决什么
+
+## SNI
 
 ClientHello 中：
 
-```text
+~~~text
 SNI = shop.example.com
-```
+~~~
 
-帮助服务器选择对应虚拟主机、证书和配置。
+解决：
 
-## 11.4 ALPN 是干什么的
+> 同一个 IP:443 上可能有多个 HTTPS 站点，服务器需要知道你想访问哪个 hostname。
 
-ClientHello 可以声明：
+经典 TLS 1.3 中 SNI 位于 ClientHello 扩展里；ECH 属于后续进阶内容。
 
-```text
-我支持：
+## ALPN
+
+客户端声明：
+
+~~~text
 h2
 http/1.1
-```
+~~~
 
-服务器通过 ALPN 协商最终应用层协议。
+服务端选择支持的应用协议。
 
-## 11.5 证书到底证明什么
+所以 TLS 不只在“加密”，它也帮助确定：
 
-浏览器主要检查：
-
-```text
-Server Certificate
-        │
-        │ 被 Intermediate CA 签名
-        ▼
-Intermediate CA Certificate
-        │
-        │ 最终链到
-        ▼
-Root CA
-        │
-        ▼
-本机 Trust Store
-```
-
-同时检查：
-
-- SAN 是否匹配 `shop.example.com`；
-- 证书是否在有效期；
-- 签名链是否有效；
-- CertificateVerify 是否证明服务器确实持有对应私钥；
-- 其他策略与可选吊销检查。
-
-重要：
-
-> HTTPS 大量业务数据通常使用 TLS 协商出来的**对称密钥**加密，不是拿证书公钥逐个 HTTP 包做非对称加密。
+> TLS 上面最终跑 HTTP/2 还是 HTTP/1.1 等协议。
 
 ---
 
-# 12. HTTP：终于开始发送“我要哪个资源”
+# 19. 浏览器怎么验证证书链
 
-TLS 建立后，HTTP 请求进入加密通道。
+服务器通常发送：
 
-HTTP/1.1 示例：
+~~~text
+Server Certificate
+Intermediate Certificate(s)
+~~~
 
-```http
-GET /products HTTP/1.1
+Root CA 通常不需要由服务器发送，因为浏览器/OS Trust Store 已经有信任锚。
+
+逻辑：
+
+~~~text
+Server Certificate
+       │
+       │ issuer / signature
+       ▼
+Intermediate CA
+       │
+       │ 最终构造到
+       ▼
+Trusted Root CA
+       │
+       ▼
+Local Trust Store
+~~~
+
+浏览器还要检查：
+
+- SAN/hostname 是否匹配 shop.example.com；
+- 当前时间是否在有效期；
+- 证书链签名与策略是否可接受；
+- CertificateVerify 是否正确；
+- Server Finished 是否正确；
+- 其他实现相关策略和可选吊销信息。
+
+---
+
+# 20. HTTP：现在业务请求才真正通过安全通道发送
+
+HTTP/1.1 的逻辑示例：
+
+~~~http
+GET /products?lang=zh-CN HTTP/1.1
 Host: shop.example.com
 User-Agent: ...
 Accept: ...
-```
+~~~
 
-如果使用 HTTP/2，则语法和帧结构不同，但逻辑上仍然是在表达：
+但在线路上，旁路设备看到的主要是 TLS Application Data，而不是这些 HTTP 明文。
 
-```text
-我要 shop.example.com 的 /products
-```
+如果 ALPN 选择 h2，那么实际使用 HTTP/2 帧，不是 HTTP/1.1 文本格式；业务语义仍然是：
 
-服务器返回：
-
-```http
-HTTP/1.1 200 OK
-Content-Type: text/html
-...
-```
-
-线上传输时，这些内容位于 TLS Application Data 中，旁路中间设备通常不能直接看到 HTTP 明文内容。
+> 请求 shop.example.com 的某个资源。
 
 ---
 
-# 13. 返回方向：不是“原样倒放”，但核心状态会帮助它回来
+# 21. 返回方向：NAT 映射和 Socket 状态让数据找到原来的应用
 
-例如公网服务器返回：
+公网响应来到：
 
-```text
-203.0.113.20:443
-        →
-198.51.100.8:62001
-```
+~~~text
+dst = 198.51.100.8:62001
+~~~
 
-家庭 NAT Router 根据已有映射：
+家庭 NAT 设备查已有映射：
 
-```text
+~~~text
 198.51.100.8:62001
         ↕
 192.168.1.20:53124
-```
+~~~
 
-转换并送回：
+于是把包送回内部主机。
 
-```text
-192.168.1.20:53124
-```
+本机收到后：
 
-本机 TCP 协议栈根据连接信息定位相应 socket，把数据放到 socket 接收缓冲区，浏览器网络组件再读取。
+~~~text
+NIC
+ ↓
+IP
+ ↓
+TCP
+ ↓
+根据连接状态定位 Socket
+ ↓
+Receive Buffer
+ ↓
+Browser fd / socket handle
+ ↓
+Browser
+~~~
+
+所以“包回来”不是靠猜：
+
+> NAT 有映射状态，TCP 有连接状态，内核有 socket 对象。
 
 ---
 
-# 14. 一张“参与者地图”
+# 22. 最终把整条链压缩成一张母图
 
-```text
-┌──────────────────────────── 本机 ────────────────────────────┐
-│                                                              │
-│ Browser                                                      │
-│   │ URL / HTTP / TLS                                         │
-│   ▼                                                          │
-│ OS Socket / TCP / IP / Route                                 │
-│   │                                                          │
-│   ├─ DNS Resolver                                            │
-│   ├─ TCP state                                               │
-│   ├─ Route table                                             │
-│   └─ ARP / neighbor cache                                    │
-│   ▼                                                          │
-│ NIC                                                          │
-└───┬──────────────────────────────────────────────────────────┘
-    │ Ethernet / Wi-Fi
-    ▼
-Home Router
-    │
-    ├─ Routing
-    ├─ NAT/PAT
-    └─ WAN
-    │
-    ▼
-ISP / Internet Routers / BGP
-    │
-    ▼
+~~~text
+【上网前置】
+DHCP / 静态配置
+ ↓
+本机 IP / Subnet / Gateway / DNS Server
+
+【Browser】
+URL
+ ↓
+名称解析
+ ↓
+A / AAAA
+ ↓
+地址排序
+ ↓
+Happy Eyeballs
+ ├─ connect IPv6
+ └─ connect IPv4
+ ↓
+winning socket
+
+【Client Kernel】
+TCP SYN
+ ↓
+IP
+ ↓
+Route
+ ↓
+ARP (IPv4) / NDP (IPv6)
+ ↓
+NIC
+
+【Home Router：典型 IPv4】
+L2 Receive
+ ↓
+Routing / Conntrack
+ ↓
+NAT/PAT
+ ↓
+WAN
+
+【Internet】
+ISP / AS / forwarding
+ ↓
 Server Network
-    │
-    ▼
-Web Server
-    │
-    ├─ TCP
-    ├─ TLS cert + private key
-    └─ HTTP
-```
 
-DNS Authoritative Server 和 CA 并不等于 Web Server，它们分别参与：
+【Server Kernel】
+NIC
+ ↓
+IP
+ ↓
+TCP 443 LISTEN
+ ↓
+握手完成
+ ↓
+Connected Socket
 
-```text
-DNS：
-“这个名字对应哪些地址？”
+【TLS】
+ClientHello
+ ↓
+ServerHello / ECDHE
+ ↓
+Certificate
+ ↓
+CertificateVerify
+ ↓
+Finished
+ ↓
+Browser 验证通过
+ ↓
+Client Finished
 
-CA：
-“这个证书与公钥经过可信签发链背书。”
-```
-
----
-
-# 15. 最容易混淆的 10 个点
-
-1. **域名 ≠ IP + 端口**：域名是名字；DNS 通常把名字解析到地址；端口通常来自 URL/protocol。
-2. **客户端临时端口不是 listen 端口**：客户端主动 connect，服务端通常固定 listen 443。
-3. **端口不直接“属于进程”**：OS 管理 socket；进程通过 fd/socket handle 使用。
-4. **DNS 不是每次都查 Root**：大量查询会在各层缓存命中。
-5. **Stub Resolver 不是全球 DNS 查询器**：它是本机轻量解析角色。
-6. **Happy Eyeballs 不是无限并发所有 IP**：是排序后的错峰竞争。
-7. **ARP 找的是下一跳 MAC**：远端目标不在当前广播域时，不会 ARP 最终服务器。
-8. **PAT 不是因为私网 TCP 本来会冲突**：是为了让多个内网连接共享公网 IP 后仍可区分。
-9. **TCP SYN 在 Route/ARP/NAT 前已经存在**：后者是在把 SYN 送出去。
-10. **CA 通常不在每次 TLS 主握手中实时批准**：证书提前签发，浏览器主要在本地验链。
-
----
-
-# 16. 一句话记忆
-
-```text
-URL 告诉浏览器“我要谁的什么资源”
-DNS 把名字变成地址候选
-Happy Eyeballs 选出可用地址
-Socket 给应用一个使用内核网络能力的入口
-TCP 建连接并提供可靠字节流
-IP 决定最终目标
-Route 决定下一跳
-ARP 找下一跳 MAC
-Ethernet/Wi-Fi 完成当前链路传输
-NAT/PAT 把私网连接映射为公网连接
-互联网路由让包逐跳接近目标
-TLS 建立机密性、完整性与身份认证
-HTTP 表达真正的业务请求
-```
+【HTTP】
+Request
+ ↓
+Response
+~~~
 
 ---
 
-# 17. 自测
+# 23. 最容易混淆的 12 个点
 
-1. 访问 `https://example.com` 时，443 是 DNS 查出来的吗？
-2. 为什么已经知道 `203.0.113.20`，还不能立刻把 Ethernet Frame 的目标 MAC 写成远端服务器 MAC？
-3. 两台内网电脑都使用源端口 50000，为什么在私网里不会天然冲突？经过一个公网 NAT 后又为什么可能需要 PAT？
-4. TCP SYN、ARP、NAT 三者的真实时序是什么？
-5. TLS 1.3 中，证书公钥、ECDHE key share、最终对称业务密钥分别解决什么问题？
-6. 为什么 CA 不需要在每次用户访问网站时实时“批准”一次？
+1. 域名不是 IP + 端口。
+2. HTTPS 默认 443 通常不是 DNS 返回的。
+3. Stub Resolver 是角色，不必等价成独立进程。
+4. hosts 是静态映射，不是普通 DNS Cache。
+5. Happy Eyeballs 本身就在发起多个错峰 connect 尝试。
+6. 客户端临时端口由 OS 管理并关联 socket，不是“Chrome 固定暴露一个端口”。
+7. TCP SYN 在 Route / ARP / NAT 之前已经产生。
+8. Route 决定下一跳；ARP 解析当前 IPv4 下一跳，不是永远找网关。
+9. IPv6 不用 ARP，而使用 NDP 等邻居发现机制。
+10. NAT/PAT 属于中间路由/NAT 设备，不属于 Browser 的“下一层协议”。
+11. CA 主要事先签发；TLS 运行时主要由 Browser 与 Server 完成握手和本地验链。
+12. HTTPS 不代表必须 TCP；HTTP/3 使用 QUIC/UDP。
 
 ---
 
-# 18. 下一章
+# 24. 自测
 
-下一章会暂时停止继续加协议名词，先回答一个更基础的问题：
+1. 为什么 Happy Eyeballs 不能画成“选完 IP → 再 connect”？
+2. TCP SYN 已经生成后，Route 和 ARP 分别解决什么问题？
+3. 如果目标是 192.168.1.50，而本机是 192.168.1.20/24，ARP 应该问谁？
+4. 为什么 NAT/PAT 必须画在 Home Router 的参与者边界里？
+5. Server 的 LISTEN socket 和三次握手完成后的 connected socket 是什么关系？
+6. TLS 1.3 中 ECDHE key share 与证书公钥分别解决什么问题？
+7. 为什么 Root CA 通常不需要服务器每次都发给浏览器？
+8. 为什么 HTTPS 不能简单记成 HTTP → TLS → TCP 的唯一实现？
 
-> **HTTP、TLS、TCP、IP、Ethernet 到底是怎么一层一层套起来的？所谓“网络分层”究竟是在分什么？**
+---
 
-见后续：`02-network-model-and-packets.md`。
+# 25. 下一步怎么学
+
+如果你还不知道：
+
+> 为什么 HTTP、TLS、TCP、IP、Ethernet 可以一层套一层？  
+> 用户进程调用 send() 后，数据究竟怎么进入内核、驱动和网卡？
+
+下一章应该进入：
+
+> **02｜网络分层、封装与 OS 收发网络包**
+
+在那里再展开：
+
+~~~text
+User Process
+ ↓ syscall
+Socket
+ ↓
+TCP
+ ↓
+IP / Route / Netfilter
+ ↓
+Neighbor
+ ↓
+qdisc / Driver
+ ↓
+TX Ring / DMA
+ ↓
+NIC
+~~~
