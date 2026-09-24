@@ -13,7 +13,7 @@
 ## 先看阅读版
 
 - **GitHub 直接阅读：** 优先看 Markdown，本仓库的 Mermaid 图会直接渲染。
-- **视觉总览：** [index.html](./index.html) 是自包含 HTML 阅读版，clone/downloading 后可以直接用浏览器打开。
+- **视觉总览：** [index.html](./index.html) 是统一视觉课程首页；clone/download 后直接用浏览器打开，并与 [assets/course.css](./assets/course.css) 共享同一套样式。
 - **完整计划：** [PLAN.md](./PLAN.md)
 
 > GitHub 文件页不会像 GitHub Pages 那样直接运行 HTML，所以仓库内以 Markdown 为“正文真源”，HTML 用作视觉总览。后续如果启用 GitHub Pages，可以直接把 HTML 作为在线阅读入口。
