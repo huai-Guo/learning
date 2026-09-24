@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>00｜电脑刚连上网络时，先拿到了什么？</title>
+  <link rel="stylesheet" href="./assets/course.css">
+</head>
+<body>
+<div class="page">
+  <aside class="toc">
+    <h2>00 · 网络启动</h2>
+    <p>在输入 URL 之前，电脑必须先知道：我是谁、谁是网关、DNS 问谁。</p>
+    <a href="#hero">0. 学习目标</a>
+    <a href="#config">1. 最终拿到什么</a>
+    <a href="#dhcp">2. DHCP DORA</a>
+    <a href="#subnet">3. 子网与网关</a>
+    <a href="#dns">4. DNS Server</a>
+    <a href="#ipv6">5. IPv6 差异</a>
+    <a href="#summary">6. 一页总结</a>
+  </aside>
+
+  <main class="content">
+    <section class="hero" id="hero">
+      <span class="badge">Chapter 00 · Network Bootstrap</span>
+      <h1>电脑刚连上网络时，<br>先拿到了什么？</h1>
+      <p class="lead">在 Browser 做 DNS、TCP、TLS 之前，OS 先要获得最基础的网络参数：<b>IP、Subnet、Default Gateway、DNS Server</b>。这一章只把“上网前置条件”讲清楚。</p>
+      <div class="hero-grid">
+        <div class="mini-card">
+          <h3>先记住四个问题</h3>
+          <ul>
+            <li>我的 IP 是什么？</li>
+            <li>哪些目标和我在同一个本地网络？</li>
+            <li>目标不在本地时，第一跳交给谁？</li>
+            <li>域名解析应该先问谁？</li>
+          </ul>
+        </div>
+        <div class="mini-card">
+          <h3>默认主线</h3>
+          <ul>
+            <li>以家庭 IPv4 + DHCP 为主。</li>
+            <li>企业网络、静态配置、IPv6 会标出差异。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="top-links"><a href="./index.html">课程首页</a><a href="./00-network-bootstrap.md">完整 Markdown</a><a href="./01-url-to-webpage.html">下一章</a></div>
+    </section>
+
+    <section class="section" id="config">
+      <span class="eyebrow">最终结果</span>
+      <h2>1. 连上网络后，OS 至少需要这些参数</h2>
+      <div class="diagram">本机 IPv4       192.168.1.20
+子网掩码        255.255.255.0  (/24)
+默认网关        192.168.1.1
+DNS Server      192.168.1.1
+租约时间        24h</div>
+      <div class="grid-4" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">IP</span><p>回答“我在这个网络里是谁”。</p></div>
+        <div class="grid-card"><span class="tag green">Subnet</span><p>回答“哪些地址可以被视作本地直连网络”。</p></div>
+        <div class="grid-card"><span class="tag orange">Gateway</span><p>回答“目标不在本地时，第一跳交给谁”。</p></div>
+        <div class="grid-card"><span class="tag purple">DNS Server</span><p>回答“域名解析请求先问谁”。</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="dhcp">
+      <span class="eyebrow">自动配置</span>
+      <h2>2. DHCP：最经典的 DORA 流程</h2>
+      <div class="sequence">
+        <div class="seq-head"><div>Client</div><div>Message</div><div>DHCP Server</div></div>
+        <div class="seq-row">
+          <div class="seq-side left"><div class="seq-msg">刚加入网络，还没有可用 IPv4 配置</div></div>
+          <div class="seq-arrow">Discover →</div>
+          <div class="seq-side right"><div class="seq-msg">“网络里有 DHCP Server 吗？”</div></div>
+        </div>
+        <div class="seq-row">
+          <div class="seq-side left"><div class="seq-msg">收到候选配置</div></div>
+          <div class="seq-arrow">← Offer</div>
+          <div class="seq-side right"><div class="seq-msg">“可以给你 192.168.1.20”</div></div>
+        </div>
+        <div class="seq-row">
+          <div class="seq-side left"><div class="seq-msg">选择一个 Offer</div></div>
+          <div class="seq-arrow">Request →</div>
+          <div class="seq-side right"><div class="seq-msg">“我要这个地址”</div></div>
+        </div>
+        <div class="seq-row">
+          <div class="seq-side left"><div class="seq-msg">安装 IP / Mask / Gateway / DNS 等配置</div></div>
+          <div class="seq-arrow">← ACK</div>
+          <div class="seq-side right"><div class="seq-msg">确认租约</div></div>
+        </div>
+      </div>
+      <div class="callout"><div class="icon">i</div><div><strong>为什么一开始没 IP 也能做 DHCP？</strong><div>DHCP 本身就是“引导协议”。客户端在早期可以借助广播等机制发现 DHCP Server，不需要先拥有一个正常可用的单播 IPv4 地址。</div></div></div>
+    </section>
+
+    <section class="section" id="subnet">
+      <span class="eyebrow">本地还是远端</span>
+      <h2>3. Subnet 决定：直接找目标，还是把 Packet 交给网关</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag green">同网段</span>
+          <div class="diagram">我：192.168.1.20/24
+目标：192.168.1.50
+
+目标属于 192.168.1.0/24
+        ↓
+下一跳就是目标主机本身
+        ↓
+后续 ARP 找目标 MAC</div>
+        </div>
+        <div class="grid-card">
+          <span class="tag orange">异网段</span>
+          <div class="diagram">我：192.168.1.20/24
+目标：203.0.113.20
+
+目标不在本地前缀
+        ↓
+使用默认路由
+        ↓
+next hop = 192.168.1.1
+        ↓
+后续 ARP 找网关 MAC</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="dns">
+      <span class="eyebrow">名字解析入口</span>
+      <h2>4. DNS Server 从哪里来？</h2>
+      <p class="intro">在家庭网络里，DHCP 经常把家庭 Router 自己发给客户端作为 DNS Server；Router 再把查询转给 ISP DNS 或公共 Resolver。企业网络、VPN、DoH/DoT 环境都可能不同。</p>
+      <div class="diagram">Laptop
+  │ DNS Server = 192.168.1.1
+  ▼
+Home Router / Local Resolver
+  ▼
+Upstream Recursive Resolver
+  ▼
+DNS hierarchy / cache</div>
+      <div class="callout"><div class="icon">!</div><div><strong>“DNS Server = Router”不代表 Router 自己就是 Authoritative DNS</strong><div>它经常只是本地代理、缓存或转发入口。</div></div></div>
+    </section>
+
+    <section class="section" id="ipv6">
+      <span class="eyebrow">IPv6 不完全照搬 IPv4</span>
+      <h2>5. IPv6：地址、网关和 DNS 也可以从不同机制获得</h2>
+      <div class="grid-3">
+        <div class="grid-card"><span class="tag blue">Router Advertisement</span><p>Router 可以通过 RA 告诉主机前缀、默认路由等信息。</p></div>
+        <div class="grid-card"><span class="tag green">SLAAC</span><p>主机可以根据前缀等信息自动形成 IPv6 地址。</p></div>
+        <div class="grid-card"><span class="tag purple">DHCPv6</span><p>可用于补充或提供地址 / 其他配置；实际组合取决于网络策略。</p></div>
+      </div>
+      <div class="callout"><div class="icon">i</div><div><strong>这里先不深挖</strong><div>后续 01 / 03 章会继续区分 IPv4 的 ARP 与 IPv6 的 NDP，以及 A / AAAA 地址选择。</div></div></div>
+    </section>
+
+    <section class="summary" id="summary">
+      <h2>6. 一页总结：在输入 URL 之前，网络其实已经准备好了</h2>
+      <div class="diagram">Wi-Fi / Ethernet 已加入网络
+        ↓
+DHCP / RA / Static Config
+        ↓
+得到本机地址
+        ↓
+得到 Subnet / Prefix
+        ↓
+得到 Default Gateway
+        ↓
+得到 DNS Server
+        ↓
+Browser 才有条件开始：
+URL → DNS → connect → TCP/TLS/HTTP</div>
+      <div class="chapter-nav"><a href="./index.html">← 课程首页</a><a href="./01-url-to-webpage.html">01 · 从 URL 到网页 →</a></div>
+    </section>
+  </main>
+</div>
+</body>
+</html>
