@@ -1,29 +1,95 @@
 # 参考资料与使用方式
 
-本目录以“输入 URL 到网页返回”为教学主线，参考公开资料核对知识覆盖面，但不会直接复制参考文章正文。
+本目录以“输入 URL 到网页返回”为主线，参考公开资料核对知识覆盖面；正文会重新组织、重新举例、重新作图，不直接复制参考文章。
 
-## 主要参考：xiaolincoder / CS-Base
+---
 
-- [network 总目录](https://github.com/xiaolincoder/CS-Base/tree/main/network)
-- [TCP/IP 网络模型有哪几层？](https://github.com/xiaolincoder/CS-Base/blob/main/network/1_base/tcp_ip_model.md)
-- [键入网址到网页显示，期间发生了什么？](https://github.com/xiaolincoder/CS-Base/blob/main/network/1_base/what_happen_url.md)
-- [Linux 系统是如何收发网络包的？](https://github.com/xiaolincoder/CS-Base/blob/main/network/1_base/how_os_deal_network_package.md)
-- [HTTP 常见面试题](https://github.com/xiaolincoder/CS-Base/blob/main/network/2_http/http_interview.md)
-- [HTTPS ECDHE 握手解析](https://github.com/xiaolincoder/CS-Base/blob/main/network/2_http/https_ecdhe.md)
-- [HTTPS 如何优化？](https://github.com/xiaolincoder/CS-Base/blob/main/network/2_http/https_optimize.md)
-- [TCP 三次握手与四次挥手面试题](https://github.com/xiaolincoder/CS-Base/blob/main/network/3_tcp/tcp_interview.md)
-- [TCP 重传、滑动窗口、流量控制、拥塞控制](https://github.com/xiaolincoder/CS-Base/blob/main/network/3_tcp/tcp_feature.md)
-- [IP 基础知识全家桶](https://github.com/xiaolincoder/CS-Base/blob/main/network/4_ip/ip_base.md)
-- [ping 的工作原理](https://github.com/xiaolincoder/CS-Base/blob/main/network/4_ip/ping.md)
+# 1. 主要知识覆盖参考：xiaolincoder / CS-Base
 
-## 本项目会主动修正/强调的教学点
+总目录：
 
-参考资料用于覆盖知识面；本项目在讲解顺序上额外强调：
+- https://github.com/xiaolincoder/CS-Base/tree/main/network
 
-1. `connect()` 后 TCP SYN 已经开始产生，Route / ARP / NAT / Internet Routing 是运输 TCP 报文的网络机制。
-2. Route 决定下一跳，ARP 在 IPv4 Ethernet 局域网中解析下一跳 MAC；不把远端服务器 MAC 当成跨互联网可见地址。
-3. NAT/PAT 在典型家用 NAPT 中按一次状态化连接映射讲解，而不是两个固定串行设备。
-4. DNS 的 Stub Resolver / Recursive Resolver 按“角色”解释，不强行等价为固定进程。
-5. Happy Eyeballs 按地址排序后的错峰竞争解释，不描述为无限制全并发。
-6. TLS 1.3 与旧 TLS 分开；CA 的“事前签发”与“连接时浏览器验链”分成两个时间轴。
-7. 数字签名使用“私钥签名、公钥验证”的表述，不使用容易误导的“私钥加密、公钥解密”。
+基础：
+
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/1_base/tcp_ip_model.md
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/1_base/what_happen_url.md
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/1_base/how_os_deal_network_package.md
+
+HTTP / HTTPS：
+
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/2_http/http_interview.md
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/2_http/https_rsa.md
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/2_http/https_ecdhe.md
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/2_http/https_optimize.md
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/2_http/http2.md
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/2_http/http3.md
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/2_http/http_websocket.md
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/2_http/http_rpc.md
+
+TCP：
+
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/3_tcp/tcp_interview.md
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/3_tcp/tcp_feature.md
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/3_tcp/tcp_queue.md
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/3_tcp/tcp_tcpdump.md
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/3_tcp/port.md
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/3_tcp/quic.md
+
+IP：
+
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/4_ip/ip_base.md
+- https://github.com/xiaolincoder/CS-Base/blob/main/network/4_ip/ping.md
+
+---
+
+# 2. 易出错部分优先对 RFC / 标准核对
+
+Happy Eyeballs v2：
+
+- RFC 8305: https://www.rfc-editor.org/rfc/rfc8305
+
+TLS 1.3：
+
+- RFC 8446: https://www.rfc-editor.org/rfc/rfc8446
+
+DHCP：
+
+- RFC 2131: https://www.rfc-editor.org/rfc/rfc2131
+
+IPv6 Neighbor Discovery：
+
+- RFC 4861: https://www.rfc-editor.org/rfc/rfc4861
+
+HTTP Semantics：
+
+- RFC 9110: https://www.rfc-editor.org/rfc/rfc9110
+
+HTTP/2：
+
+- RFC 9113: https://www.rfc-editor.org/rfc/rfc9113
+
+HTTP/3：
+
+- RFC 9114: https://www.rfc-editor.org/rfc/rfc9114
+
+QUIC Transport：
+
+- RFC 9000: https://www.rfc-editor.org/rfc/rfc9000
+
+---
+
+# 3. 本项目会主动强调的准确性问题
+
+1. connect() 后 TCP SYN 已经开始产生；Route / ARP / NAT / Internet Routing 是在运输 TCP 报文。
+2. Route 决定下一跳；ARP 在 IPv4 Ethernet 场景解析下一跳 MAC。
+3. IPv6 不使用 ARP，使用 NDP 等机制。
+4. NAT/PAT 在典型家庭 NAPT 中按一次状态化连接映射解释。
+5. DNS 的 Stub Resolver / Recursive Resolver 按角色解释，不强行等价成固定进程。
+6. Happy Eyeballs 是地址排序后的错峰连接竞争，不写成无限制全并发。
+7. TLS 1.3 与旧版 TLS 分开，不用“TLS 四次握手”概括所有版本。
+8. CA 的证书签发与浏览器连接时验链分成两个时间轴。
+9. ECDHE 临时 key share 与证书身份公钥分开。
+10. 数字签名写成“私钥签名、公钥验证”，避免“私钥加密、公钥解密”的误导说法。
+11. HTTP/3 使用 QUIC/UDP，不把 HTTPS 永远绑定 TCP。
+12. Linux 内核实现细节与协议抽象分层讲，不拿某个 Linux 版本实现冒充协议规范。
