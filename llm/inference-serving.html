@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LLM Inference / Serving 图解</title><link rel="stylesheet" href="assets/site.css"></head>
+<body>
+<header class="topbar"><div class="topbar-inner"><div class="brand"><div class="brand-badge">INF</div><div>Inference / Serving 图解</div></div>
+<div class="toplinks"><a href="index.html">总览</a><a href="training.html">上一章</a><a href="rag-agent.html">下一章</a></div></div></header>
+<main class="shell">
+<aside class="sidebar"><h3>本页导航</h3><p>从用户 Prompt 到 GPU，再到 token 流式返回，把整个线上推理链打通。</p>
+<nav class="sidenav"><a href="#overview">1. 总链路</a><a href="#prefill">2. Prefill / Decode</a><a href="#kv">3. KV Cache</a><a href="#gqa">4. GQA 与 KV</a><a href="#sampling">5. Sampling</a><a href="#prefix">6. Prefix Cache</a><a href="#paged">7. PagedAttention</a><a href="#batch">8. Continuous Batching</a><a href="#metrics">9. TTFT/TPOT</a><a href="#engines">10. vLLM/SGLang/TGI/llama.cpp</a><a href="#system">11. 高并发系统</a></nav></aside>
+<div class="content">
+<section id="overview" class="hero reveal"><div class="eyebrow">模型会跑 ≠ 服务能上线</div><h1>LLM 推理与 Serving：从 Prompt 到 Token Stream</h1>
+<p class="lead">真正的线上问题不是“模型能不能生成”，而是：<strong>首 token 多快、每个 token 多快、能扛多少并发、显存会不会爆、GPU 能不能吃满。</strong></p>
+<div class="flow horizontal" style="--cols:6;margin-top:20px"><div class="step"><strong>Client</strong><span>发送 Prompt</span></div><div class="step"><strong>Gateway</strong><span>鉴权 / 限流</span></div><div class="step"><strong>Queue</strong><span>等待调度</span></div><div class="step"><strong>Scheduler</strong><span>组 Batch / 分配 KV</span></div><div class="step"><strong>GPU Worker</strong><span>Prefill + Decode</span></div><div class="step"><strong>Stream</strong><span>SSE / WebSocket</span></div></div></section>
+
+<section id="prefill" class="panel section reveal"><div class="section-head"><h2>2. Prefill 与 Decode：同一个模型，两种完全不同的性能阶段</h2><p>这是部署面试最重要的一组概念。</p></div>
+<div class="compare">
+<div class="side"><h3>Prefill</h3><ul><li>一次处理整个 Prompt</li><li>token 间可并行</li><li>大矩阵乘法占比高</li><li>通常更偏 Compute-bound</li><li>建立初始 KV Cache</li></ul></div>
+<div class="side"><h3>Decode</h3><ul><li>每步新增一个 token</li><li>严格串行依赖前一步</li><li>反复读取历史 KV</li><li>容易 Memory-bandwidth-bound</li><li>决定 TPOT</li></ul></div>
+</div>
+<div class="callout info"><strong>为什么会有 PD 分离？</strong> 因为 Prefill 和 Decode 的硬件瓶颈不同，可以独立调度甚至放到不同 Worker。</div></section>
+
+<section id="kv" class="panel section reveal"><div class="section-head"><h2>3. KV Cache：到底缓存了什么，又没缓存什么</h2><p>它避免的是“历史 K/V 投影重复计算”，不是让模型不再看历史。</p></div>
+<div class="grid2">
+<div class="diagram"><div class="diagram-title">没有 KV Cache</div><div class="flow">
+<div class="step"><strong>Step 1</strong><span>算 token1 K/V</span></div><div class="step"><strong>Step 2</strong><span>又算 token1 + token2</span></div><div class="step"><strong>Step 3</strong><span>又算 token1..3</span></div></div></div>
+<div class="diagram"><div class="diagram-title">有 KV Cache</div><div class="flow">
+<div class="step"><strong>历史 K/V</strong><span>直接复用</span></div><div class="step"><strong>New Token</strong><span>只新算 Q/K/V</span></div><div class="step"><strong>Attention</strong><span>Q_new 仍要看历史 K</span></div></div></div>
+</div>
+<div class="callout warn">高频误区：KV Cache 不会把 Attention 变成“只看新 token”；它只是避免历史 token 的 K/V 投影反复重算。</div></section>
+
+<section id="gqa" class="panel section reveal"><div class="section-head"><h2>4. 为什么 GQA 会直接影响并发能力</h2><p>KV Cache 的大小与 num_kv_heads 线性相关。</p></div>
+<div class="codebox">KV bytes ≈ 2 × layers × seq_len × num_kv_heads × head_dim × bytes × batch</div>
+<div class="grid3" style="margin-top:14px"><div class="card"><h3>MHA</h3><p>KV heads 多，缓存大。</p></div><div class="card"><h3>GQA</h3><p>多个 Q heads 共享 KV，缓存明显下降。</p></div><div class="card"><h3>MQA</h3><p>所有 Q 共享一套 KV，最省。</p></div></div>
+<div class="callout info">同样显存下，KV 更省通常意味着：能放更长上下文、更多并发请求或更大 batch。</div></section>
+
+<section id="sampling" class="panel section reveal"><div class="section-head"><h2>5. Logits 之后，模型怎么选下一个 token</h2><p>生成不是只有“取最大值”。</p></div>
+<div class="grid4">
+<div class="card"><h3>Greedy</h3><p>每步 argmax。稳定、确定，但缺少多样性。</p></div>
+<div class="card"><h3>Temperature</h3><p>控制分布尖锐程度。低温更确定，高温更多样。</p></div>
+<div class="card"><h3>Top-k</h3><p>只保留概率最高的 k 个 token。</p></div>
+<div class="card"><h3>Top-p</h3><p>保留累计概率达到 p 的最小候选集合，更自适应。</p></div>
+</div>
+<div class="callout warn">代码 / JSON / 数学通常偏低随机性；创意写作可以更开放。真正参数应该用自己的 Eval 集调，而不是照抄网络模板。</div></section>
+
+<section id="prefix" class="panel section reveal"><div class="section-head"><h2>6. Prefix Cache：公司 5000 token System Prompt 为什么不用每次重算</h2><p>跨请求复用相同前缀的 KV。</p></div>
+<div class="flow horizontal" style="--cols:4"><div class="step"><strong>公共 System Prompt</strong><span>公司规则 / Tool Schema</span></div><div class="step"><strong>首次 Prefill</strong><span>生成 Prefix KV</span></div><div class="step"><strong>Cache</strong><span>按前缀 Hash 保存</span></div><div class="step"><strong>后续请求</strong><span>直接复用，再算用户增量</span></div></div>
+<div class="callout bad">多租户场景要考虑 Cache Isolation、权限、隐私和 Timing Side Channel，不能只看性能。</div></section>
+
+<section id="paged" class="panel section reveal"><div class="section-head"><h2>7. PagedAttention：为什么 KV Cache 要像操作系统内存一样“分页”</h2><p>请求长度不同，如果都预留最大连续空间，会浪费很多显存。</p></div>
+<div class="grid2">
+<div class="card white"><h3>连续预留</h3><p>Request A 只用了 2K，却预留 32K；Request B 只用了 8K，也预留 32K。内部碎片明显。</p></div>
+<div class="card white"><h3>分页管理</h3><p>KV 被切成固定 block，需要多少就分多少，通过 block table 映射逻辑序列。</p></div>
+</div>
+<div class="callout info"><strong>价值：</strong>降低碎片、提高 KV 利用率、支持动态请求长度和更高并发。这是 vLLM 早期最具代表性的设计之一。</div></section>
+
+<section id="batch" class="panel section reveal"><div class="section-head"><h2>8. Continuous Batching：为什么 Batch 不是固定的一组请求</h2><p>在线请求随时来、输出长度也完全不同。</p></div>
+<div class="compare"><div class="side"><h3>Static Batch</h3><ul><li>A 要 100 token</li><li>B 只要 20 token</li><li>B 结束后槽位可能闲着</li></ul></div>
+<div class="side"><h3>Continuous Batch</h3><ul><li>B 完成立即移出</li><li>新请求 C 立即加入</li><li>GPU batch 持续保持饱和</li></ul></div></div></section>
+
+<section id="metrics" class="panel section reveal"><div class="section-head"><h2>9. TTFT、TPOT、Throughput：不要只说“延迟”</h2><p>不同指标对应不同用户体验和瓶颈。</p></div>
+<div class="grid3"><div class="card"><h3>TTFT</h3><p>请求进入到第一个 token。受排队、Prefill、调度影响大。</p></div><div class="card"><h3>TPOT</h3><p>首 token 之后每个输出 token 的平均时间。Decode 性能关键。</p></div><div class="card"><h3>Throughput</h3><p>单位时间处理的 token/request 数。通常和单请求 latency 有权衡。</p></div></div>
+<div class="callout info">线上要看 P50/P95/P99，而不是只报一个平均值。</div></section>
+
+<section id="engines" class="panel section reveal"><div class="section-head"><h2>10. vLLM / SGLang / TGI / llama.cpp 到底各自是什么</h2><p>它们不是“模型”，而是推理/Serving 生态。</p></div>
+<table><thead><tr><th>框架</th><th>典型强项</th><th>常见场景</th></tr></thead><tbody>
+<tr><td>vLLM</td><td>Paged KV、Continuous Batching、Prefix Cache、分布式 Serving</td><td>GPU 高吞吐 API</td></tr>
+<tr><td>SGLang</td><td>Cache-aware runtime、Structured Generation、PD 分离、大模型/MoE</td><td>高性能推理与复杂工作负载</td></tr>
+<tr><td>TGI</td><td>Hugging Face 生产 Serving 生态、Router、TP、Streaming</td><td>HF 体系生产部署</td></tr>
+<tr><td>llama.cpp</td><td>GGUF、CPU/Mac/Edge、低比特、本地运行</td><td>本地与边缘设备</td></tr>
+</tbody></table>
+<div class="callout warn">不要回答“谁永远最快”。性能强依赖模型、GPU、量化格式、上下文、batch、并发和框架版本。</div></section>
+
+<section id="system" class="panel section reveal"><div class="section-head"><h2>11. 高并发 LLM API 应该怎样画</h2><p>这张图是 Serving 系统设计题的骨架。</p></div>
+<div class="flow horizontal" style="--cols:6"><div class="step"><strong>Clients</strong><span>HTTP/SSE</span></div><div class="step"><strong>Gateway</strong><span>Auth / Rate Limit</span></div><div class="step"><strong>Queue</strong><span>Backpressure</span></div><div class="step"><strong>Scheduler</strong><span>Token Budget / KV</span></div><div class="step"><strong>GPU Workers</strong><span>TP / EP / Replicas</span></div><div class="step"><strong>Metrics</strong><span>TTFT / TPOT / OOM</span></div></div>
+<div class="grid4" style="margin-top:14px"><div class="card"><h3>显存</h3><p>Weights + KV + temp buffers + runtime overhead。</p></div><div class="card"><h3>调度</h3><p>Admission、Priority、Preemption、Continuous Batch。</p></div><div class="card"><h3>扩容</h3><p>TP/PP/EP 与多副本。</p></div><div class="card"><h3>可观测</h3><p>Queue depth、GPU utilization、KV utilization、P99。</p></div></div></section>
+<footer>下一章：RAG / Agent 图解</footer>
+</div></main><script src="assets/site.js"></script></body></html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Transformer / BERT / GPT 图解</title><link rel="stylesheet" href="assets/site.css"></head>
+<body>
+<header class="topbar"><div class="topbar-inner">
+  <div class="brand"><div class="brand-badge">T</div><div>Transformer / BERT / GPT 图解</div></div>
+  <div class="toplinks"><a href="index.html">返回总览</a><a href="training.html">下一章：Training</a></div>
+</div></header>
+<main class="shell">
+<aside class="sidebar"><h3>本页导航</h3><p>先看结构，再看 QKV，最后看 Encoder/Decoder 和推理优化。</p>
+<nav class="sidenav">
+<a href="#overview">1. 总关系</a><a href="#block">2. Decoder Block</a><a href="#attention">3. Self-Attention</a>
+<a href="#qkv">4. Q/K/V</a><a href="#scale">5. √dₖ</a><a href="#heads">6. 多头</a>
+<a href="#encdec">7. Encoder vs Decoder</a><a href="#bertgpt">8. BERT vs GPT</a><a href="#position">9. 位置编码</a>
+<a href="#gqa">10. MHA/MQA/GQA</a><a href="#flash">11. FlashAttention</a><a href="#lost">12. Lost in the Middle</a>
+</nav></aside>
+
+<div class="content">
+<section id="overview" class="hero reveal">
+  <div class="eyebrow">模型结构第一关</div><h1>Transformer、BERT、GPT 一次串通</h1>
+  <p class="lead"><strong>Transformer 是架构骨架；BERT 是 Encoder-only；GPT 是 Decoder-only。</strong> 真正的关键不是背名字，而是理解“注意力看哪些位置、训练目标是什么、输出怎么产生”。</p>
+  <div class="kpis">
+    <div class="kpi"><strong>Transformer</strong><span>Attention + FFN + Residual + Norm</span></div>
+    <div class="kpi"><strong>BERT</strong><span>双向 Encoder，偏表征与理解</span></div>
+    <div class="kpi"><strong>GPT</strong><span>因果 Decoder，偏自回归生成</span></div>
+    <div class="kpi"><strong>现代优化</strong><span>RoPE / GQA / FlashAttention</span></div>
+  </div>
+</section>
+
+<section id="block" class="panel section reveal">
+  <div class="section-head"><h2>2. 一个 Decoder Block 到底长什么样</h2><p>先把结构画出来，后面所有优化都能找到位置。</p></div>
+  <div class="grid2">
+    <div class="diagram"><div class="diagram-title">典型 Pre-Norm Decoder Block</div>
+      <div class="stack">
+        <div class="block blue">Hidden States x</div><div class="down">↓</div>
+        <div class="block purple">RMSNorm</div><div class="down">↓</div>
+        <div class="block green">Self-Attention<br>Q / K / V + RoPE + Causal Mask</div><div class="down">↓</div>
+        <div class="block blue">Residual：x + Attention(x)</div><div class="down">↓</div>
+        <div class="block purple">RMSNorm</div><div class="down">↓</div>
+        <div class="block orange">FFN / SwiGLU / MoE</div><div class="down">↓</div>
+        <div class="block red">Residual → 下一层</div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>每一块到底负责什么？</h3>
+      <p><strong>Attention：</strong>让 token 和上下文其他 token 交换信息。</p><br>
+      <p><strong>FFN：</strong>对当前位置的表示做非线性特征变换。</p><br>
+      <p><strong>Residual：</strong>提供信息与梯度高速通道，深层网络更易训练。</p><br>
+      <p><strong>Norm：</strong>稳定激活尺度与优化过程。</p>
+      <div class="callout info">一句话：<strong>Attention 负责“去哪里取信息”，FFN 负责“拿回来后怎么加工”。</strong></div>
+    </div>
+  </div>
+</section>
+
+<section id="attention" class="panel section reveal">
+  <div class="section-head"><h2>3. Self-Attention 先别看公式，先看“她”在找谁</h2><p>当前 token 会给上下文各位置打相关性分数，再按权重汇总信息。</p></div>
+  <div class="grid2">
+    <div>
+      <div class="diagram"><div class="diagram-title">例子：小明把苹果给了小红，因为她饿了</div>
+        <div class="token-row"><span class="token">小明</span><span class="token">苹果</span><span class="token">小红</span><span class="token focus">她</span><span class="token">饿了</span></div>
+      </div>
+      <div class="diagram" style="margin-top:12px"><div class="diagram-title">“她”对其他 token 的关注强度（示意）</div>
+        <div class="bar-row"><span>小明</span><div class="bar"><i style="width:18%"></i></div><b>0.18</b></div>
+        <div class="bar-row"><span>苹果</span><div class="bar"><i style="width:8%"></i></div><b>0.08</b></div>
+        <div class="bar-row"><span>小红</span><div class="bar"><i style="width:80%"></i></div><b>0.80</b></div>
+        <div class="bar-row"><span>饿了</span><div class="bar"><i style="width:35%"></i></div><b>0.35</b></div>
+      </div>
+    </div>
+    <div class="card"><h3>Attention 的 3 步</h3>
+      <div class="flow">
+        <div class="step"><strong>① Match</strong><span>Q 和 K 算“我应该关注谁”</span></div>
+        <div class="step"><strong>② Softmax</strong><span>把分数变成可比较权重</span></div>
+        <div class="step"><strong>③ Aggregate</strong><span>按权重把 V 聚合回来</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="qkv" class="panel section reveal">
+  <div class="section-head"><h2>4. Q / K / V：把“找谁”和“拿什么”拆开</h2><p>它们都来自同一个 X，只是经过不同可学习矩阵投影。</p></div>
+  <div class="grid2">
+    <div class="diagram"><div class="stack">
+      <div class="block blue">输入 X</div><div class="down">↓</div>
+      <div class="block">Q = XWq</div><div class="block">K = XWk</div><div class="block">V = XWv</div>
+      <div class="down">↓</div><div class="block green">softmax(QKᵀ / √dₖ) · V</div>
+    </div></div>
+    <div class="card"><h3>人话记忆</h3>
+      <p><strong>Q：</strong>我正在找什么。</p><br><p><strong>K：</strong>我可以被怎样匹配。</p><br><p><strong>V：</strong>真正会被拿走的信息。</p>
+      <div class="callout info"><strong>QK 决定“关注谁”，V 决定“取回什么”。</strong></div>
+    </div>
+  </div>
+</section>
+
+<section id="scale" class="panel section reveal">
+  <div class="section-head"><h2>5. 为什么要除以 √dₖ</h2><p>维度越高，点积尺度容易越大，Softmax 可能过度饱和。</p></div>
+  <div class="compare">
+    <div class="side"><h3>不缩放</h3><ul><li>QK 数值可能很大</li><li>Softmax 极尖</li><li>一个位置接近 1，其余接近 0</li><li>梯度变得不友好</li></ul></div>
+    <div class="side"><h3>除 √dₖ</h3><ul><li>把分数尺度拉回稳定区间</li><li>Softmax 更平滑</li><li>训练更稳定</li></ul></div>
+  </div>
+</section>
+
+<section id="heads" class="panel section reveal">
+  <div class="section-head"><h2>6. 为什么要 Multi-Head</h2><p>一个头只有一个匹配空间，多头让模型并行学习不同关系。</p></div>
+  <div class="flow horizontal" style="--cols:4">
+    <div class="step"><strong>输入 X</strong><span>同一份 token 表示</span></div>
+    <div class="step"><strong>Head 1..N</strong><span>不同 Q/K/V 投影空间</span></div>
+    <div class="step"><strong>Concat</strong><span>拼接多个头结果</span></div>
+    <div class="step"><strong>Output Projection</strong><span>映射回 hidden size</span></div>
+  </div>
+  <div class="callout warn">“某个头专门学语法、某个头专门学指代”只能作为直觉示意，不要把每个 head 人工固定解释成具体功能。</div>
+</section>
+
+<section id="encdec" class="panel section reveal">
+  <div class="section-head"><h2>7. Encoder vs Decoder：根本差别是“能看哪里”</h2><p>这是理解 BERT 与 GPT 的核心。</p></div>
+  <div class="compare">
+    <div class="side"><h3>Encoder：双向</h3><ul><li>当前位置能看左右两侧</li><li>适合做全局表征</li><li>分类 / NER / Embedding / Retrieval</li><li>代表：BERT</li></ul></div>
+    <div class="side"><h3>Decoder：因果单向</h3><ul><li>当前位置只能看自己和历史</li><li>不能偷看未来 token</li><li>天然适合自回归生成</li><li>代表：GPT / Llama / Qwen</li></ul></div>
+  </div>
+  <div class="callout bad">不要只说“Encoder=理解，Decoder=生成”。更准确：<strong>注意力可见范围和训练目标不同，导致它们更适配不同任务。</strong></div>
+</section>
+
+<section id="bertgpt" class="panel section reveal">
+  <div class="section-head"><h2>8. BERT vs GPT 一张表</h2><p>这张表建议直接口述。</p></div>
+  <table><thead><tr><th>维度</th><th>BERT</th><th>GPT 类</th></tr></thead>
+  <tbody><tr><td>架构</td><td>Encoder-only</td><td>Decoder-only</td></tr>
+  <tr><td>上下文</td><td>双向</td><td>因果单向</td></tr>
+  <tr><td>经典目标</td><td>Masked LM</td><td>Next Token Prediction</td></tr>
+  <tr><td>强项</td><td>表征 / 理解 / 分类 / 检索</td><td>生成 / 对话 / 代码 / Agent</td></tr></tbody></table>
+  <div class="grid2" style="margin-top:14px">
+    <div class="card"><h3>BERT</h3><p>“北京是 <strong>[MASK]</strong> 的首都” → 根据左右文猜“中国”。</p></div>
+    <div class="card"><h3>GPT</h3><p>“北京是中国的” → 继续预测“首都”。</p></div>
+  </div>
+</section>
+
+<section id="position" class="panel section reveal">
+  <div class="section-head"><h2>9. 位置编码：模型为什么知道“狗咬人”和“人咬狗”不同</h2><p>Attention 自身没有天然顺序感。</p></div>
+  <div class="grid3">
+    <div class="card"><h3>Sin / Cos</h3><p>原始 Transformer：给不同位置构造固定正弦/余弦编码。</p></div>
+    <div class="card"><h3>RoPE</h3><p>根据位置旋转 Q/K，使点积自然带上相对位置信息。现代 LLM 非常常见。</p></div>
+    <div class="card"><h3>ALiBi</h3><p>直接在 Attention score 上加入与距离相关的偏置。</p></div>
+  </div>
+</section>
+
+<section id="gqa" class="panel section reveal">
+  <div class="section-head"><h2>10. MHA / MQA / GQA：核心是 KV 怎么共享</h2><p>它直接关系到 KV Cache 大小和 Decode 带宽。</p></div>
+  <div class="grid3">
+    <div class="card white"><h3>MHA</h3><p>Q1↔K1,V1；Q2↔K2,V2……每个 Q head 都有自己的 KV。</p><div class="pills"><span class="pill">质量稳</span><span class="pill">KV 大</span></div></div>
+    <div class="card white"><h3>MQA</h3><p>所有 Q heads 共用一组 K/V。</p><div class="pills"><span class="pill">KV 最省</span><span class="pill">共享最强</span></div></div>
+    <div class="card white"><h3>GQA</h3><p>一组 Q heads 共用一组 K/V，在质量与 KV 成本间折中。</p><div class="pills"><span class="pill">现代常见</span><span class="pill">推理友好</span></div></div>
+  </div>
+  <div class="callout info"><strong>为什么 GQA 对推理重要？</strong> Decode 每步都要读取历史 KV。KV heads 越少，显存和 memory bandwidth 压力越低。</div>
+</section>
+
+<section id="flash" class="panel section reveal">
+  <div class="section-head"><h2>11. FlashAttention：不是新结构，而是更聪明地算同一个 Attention</h2><p>高频陷阱：GQA 与 FlashAttention 不在同一层。</p></div>
+  <div class="compare">
+    <div class="side"><h3>GQA / MQA</h3><ul><li>改变模型 Attention 结构</li><li>减少 KV heads</li><li>降低 KV Cache</li></ul></div>
+    <div class="side"><h3>FlashAttention</h3><ul><li>改变 GPU 计算与 IO 方式</li><li>分块计算</li><li>减少 HBM↔片上存储往返</li><li>避免大中间矩阵频繁物化</li></ul></div>
+  </div>
+  <div class="callout bad">不要说“FlashAttention 把 O(n²) 变成 O(n)”。经典 FlashAttention 的核心是 <strong>IO-aware exact attention</strong>。</div>
+</section>
+
+<section id="lost" class="panel section reveal">
+  <div class="section-head"><h2>12. Lost in the Middle：支持 1M context ≠ 中间 1M token 都利用得一样好</h2><p>上下文容量和信息利用率是两回事。</p></div>
+  <div class="grid3">
+    <div class="card"><h3>开头</h3><p>关键事实通常较容易被利用。</p></div>
+    <div class="card"><h3>中间</h3><p>在长上下文里更容易被噪声淹没。</p></div>
+    <div class="card"><h3>结尾</h3><p>离当前生成位置较近，通常也较容易使用。</p></div>
+  </div>
+  <div class="callout info">所以实际系统会做 RAG、Rerank、Context Pruning、Summary，而不是“能塞多少就塞多少”。</div>
+</section>
+
+<footer>下一章：Pretraining / Post-training 图解</footer>
+</div>
+</main>
+<script src="assets/site.js"></script>
+</body></html>

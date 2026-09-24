@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LLM 大模型面试速成路线</title>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<header class="topbar"><div class="topbar-inner">
+  <div class="brand"><div class="brand-badge">LLM</div><div>大模型面试速成路线</div></div>
+  <div class="toplinks"><a href="#map">总地图</a><a href="#chapters">章节</a><a href="#plan">7天计划</a><a href="transformer.html">Transformer 图解</a></div>
+</div></header>
+
+<main class="shell home">
+<div class="content">
+<section class="hero reveal">
+  <div class="eyebrow">从计算机小白 → 能回答大厂 LLM 面试</div>
+  <h1>不是背 23 道题，而是建立一棵完整的 LLM 知识树</h1>
+  <p class="lead">目标是把 Transformer、预训练、后训练、推理、LoRA、RAG、Agent、MoE、vLLM 和评测串成一条因果链。以后看到一个新名词，你先知道它属于哪一层、解决哪个瓶颈，再去记细节。</p>
+  <div class="kpis">
+    <div class="kpi"><strong>16+</strong><span>系统章节</span></div>
+    <div class="kpi"><strong>80</strong><span>高频面试问题</span></div>
+    <div class="kpi"><strong>3</strong><span>端到端系统设计案例</span></div>
+    <div class="kpi"><strong>7 天</strong><span>冲刺学习路线</span></div>
+  </div>
+</section>
+
+<section id="map" class="panel section reveal">
+  <div class="section-head"><h2>一张图看懂 LLM 全景</h2><p>这条主链建议直接背成脑内地图。你后面看到的每一个概念，都应该能挂在这里。</p></div>
+  <div class="flow horizontal" style="--cols:6">
+    <div class="step"><strong>基础</strong><span>向量 / 矩阵<br>Softmax / Loss<br>Embedding</span></div>
+    <div class="step"><strong>Transformer</strong><span>QKV / Attention<br>RoPE / GQA<br>FFN / Norm</span></div>
+    <div class="step"><strong>训练</strong><span>Pretraining<br>SFT / DPO<br>PPO / GRPO</span></div>
+    <div class="step"><strong>推理</strong><span>Prefill / Decode<br>KV Cache<br>Sampling</span></div>
+    <div class="step"><strong>系统</strong><span>RAG / Agent<br>MoE / Serving<br>vLLM / SGLang</span></div>
+    <div class="step"><strong>评测</strong><span>Benchmark<br>LLM-as-Judge<br>线上 A/B</span></div>
+  </div>
+  <div class="callout info"><strong>核心学习方法：</strong>每个概念都用“定义 → 机制 → 为什么需要 → 工程代价 → 使用场景”回答。</div>
+</section>
+
+<section id="chapters" class="panel section reveal">
+  <div class="section-head"><h2>图文化核心章节</h2><p>优先看这 4 个页面。它们覆盖面试里最容易被追问的主链。</p></div>
+  <div class="grid4">
+    <a class="card white" href="transformer.html" style="text-decoration:none">
+      <h3>01｜Transformer / BERT / GPT</h3><p>QKV、Self-Attention、Encoder/Decoder、RoPE、MHA/MQA/GQA、FlashAttention。</p>
+      <div class="pills"><span class="pill">结构基础</span><span class="pill">必会</span></div>
+    </a>
+    <a class="card white" href="training.html" style="text-decoration:none">
+      <h3>02｜Pretraining / Post-training</h3><p>Tokenizer → Base Model → SFT → Preference → DPO/PPO/GRPO → Reasoning Model。</p>
+      <div class="pills"><span class="pill">训练生命周期</span><span class="pill">高频</span></div>
+    </a>
+    <a class="card white" href="inference-serving.html" style="text-decoration:none">
+      <h3>03｜Inference / Serving</h3><p>Prefill、Decode、KV Cache、PagedAttention、Continuous Batching、TTFT/TPOT。</p>
+      <div class="pills"><span class="pill">工程核心</span><span class="pill">部署</span></div>
+    </a>
+    <a class="card white" href="rag-agent.html" style="text-decoration:none">
+      <h3>04｜RAG / Agent</h3><p>Embedding、Retriever、Reranker、Tool Calling、Agent Loop、Memory、MCP。</p>
+      <div class="pills"><span class="pill">应用架构</span><span class="pill">Agent</span></div>
+    </a>
+  </div>
+</section>
+
+<section class="panel section reveal">
+  <div class="section-head"><h2>截图里的 23 题，实际上只有 4 组</h2><p>不要把它们当 23 个孤立名词。</p></div>
+  <div class="grid4">
+    <div class="card"><h3>模型结构</h3><p>LLM、Transformer、Encoder/Decoder、MHA/MQA/GQA、位置编码、Lost in the Middle。</p></div>
+    <div class="card"><h3>训练与微调</h3><p>Tokenizer、预训练、Scaling Law、SFT、RLHF、DPO、PPO、GRPO、LoRA。</p></div>
+    <div class="card"><h3>推理与部署</h3><p>Sampling、Temperature、KV Cache、Prompt Cache、量化、vLLM、TGI、SGLang、llama.cpp。</p></div>
+    <div class="card"><h3>应用与评测</h3><p>Prompt、CoT、RAG、Agent、MoE、幻觉、Benchmark、模型选型。</p></div>
+  </div>
+</section>
+
+<section class="panel section reveal">
+  <div class="section-head"><h2>四条学习路线</h2><p>按目标学，不必机械从第一页翻到最后。</p></div>
+  <div class="pathgrid">
+    <div class="pathcard"><h3>零基础</h3><p>先把模型与训练链打通。</p><div class="pathline">基础 → Transformer → Training → Inference</div></div>
+    <div class="pathcard"><h3>面试冲刺</h3><p>优先覆盖追问最多的概念。</p><div class="pathline">Transformer → Post-training → Serving → Eval</div></div>
+    <div class="pathcard"><h3>推理工程</h3><p>关注延迟、吞吐、显存与多卡。</p><div class="pathline">Inference → KV → vLLM/SGLang → Quantization</div></div>
+    <div class="pathcard"><h3>RAG / Agent</h3><p>关注检索、工具、状态和安全。</p><div class="pathline">RAG → Tool Calling → Agent Loop → Eval</div></div>
+  </div>
+</section>
+
+<section id="plan" class="panel section reveal">
+  <div class="section-head"><h2>7 天速成</h2><p>每天要求“会画 + 会讲 + 会追问”，而不是只读完。</p></div>
+  <div class="timeline">
+    <div class="timeline-row"><div class="day">DAY 1</div><div class="daybody"><h3>Transformer / BERT / GPT</h3><p>必须能手画 Decoder Block，并解释 QKV、Causal Mask、RoPE、GQA。</p></div></div>
+    <div class="timeline-row"><div class="day">DAY 2</div><div class="daybody"><h3>Pretraining / Post-training</h3><p>随机参数如何变成 Base Model，再变成 Chat / Reasoning Model。</p></div></div>
+    <div class="timeline-row"><div class="day">DAY 3</div><div class="daybody"><h3>Inference / Serving</h3><p>Prefill、Decode、KV Cache、PagedAttention、TTFT/TPOT。</p></div></div>
+    <div class="timeline-row"><div class="day">DAY 4</div><div class="daybody"><h3>LoRA / Quantization / RAG</h3><p>什么时候微调，什么时候 RAG，为什么 LoRA 省显存。</p></div></div>
+    <div class="timeline-row"><div class="day">DAY 5</div><div class="daybody"><h3>Agent / MoE</h3><p>Tool Calling、Agent Loop、Memory、MCP、Router、Expert Parallel。</p></div></div>
+    <div class="timeline-row"><div class="day">DAY 6</div><div class="daybody"><h3>Eval / Hallucination / System Design</h3><p>模型怎么选、怎么验证、怎么上线。</p></div></div>
+    <div class="timeline-row"><div class="day">DAY 7</div><div class="daybody"><h3>80 题 Mock Interview</h3><p>每题先 30 秒，再 2 分钟，再连续追问两个 Why。</p></div></div>
+  </div>
+</section>
+
+<section class="panel section reveal">
+  <div class="section-head"><h2>面试前必须能画出的 8 张图</h2><p>不会画，通常说明知识还没有真正串起来。</p></div>
+  <div class="grid4">
+    <div class="card"><h3>① Decoder Block</h3><p>Norm → Attention → Residual → Norm → FFN → Residual。</p></div>
+    <div class="card"><h3>② Q / K / V</h3><p>QK 匹配，V 承载被聚合的信息。</p></div>
+    <div class="card"><h3>③ Encoder vs Decoder</h3><p>双向可见与 Causal Mask。</p></div>
+    <div class="card"><h3>④ Training Lifecycle</h3><p>Pretrain → SFT → Preference/RL。</p></div>
+    <div class="card"><h3>⑤ Prefill / Decode</h3><p>为什么 Decode 依赖 KV 和内存带宽。</p></div>
+    <div class="card"><h3>⑥ RAG Pipeline</h3><p>Chunk → Retrieve → Rerank → Grounded Generation。</p></div>
+    <div class="card"><h3>⑦ Agent Loop</h3><p>Observe → Decide → Tool → Result → Continue。</p></div>
+    <div class="card"><h3>⑧ Serving Scheduler</h3><p>Queue → Continuous Batch → GPU → Stream。</p></div>
+  </div>
+</section>
+
+<footer>LLM Visual Learning Path · 建议从 Transformer 图解开始</footer>
+</div>
+</main>
+<script src="assets/site.js"></script>
+</body></html>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RAG / Agent 图解</title><link rel="stylesheet" href="assets/site.css"></head>
+<body>
+<header class="topbar"><div class="topbar-inner"><div class="brand"><div class="brand-badge">A</div><div>RAG / Agent 图解</div></div>
+<div class="toplinks"><a href="index.html">总览</a><a href="inference-serving.html">上一章</a><a href="10-interview-bank.md">80题题库</a></div></div></header>
+<main class="shell">
+<aside class="sidebar"><h3>本页导航</h3><p>把“模型会回答”升级为“系统能查资料、调用工具、循环完成任务”。</p>
+<nav class="sidenav"><a href="#rag">1. RAG 总图</a><a href="#chunk">2. Chunk</a><a href="#retrieval">3. Retrieval</a><a href="#rerank">4. Rerank</a><a href="#eval">5. RAG Eval</a><a href="#tool">6. Tool Calling</a><a href="#agent">7. Agent Loop</a><a href="#memory">8. Memory / Context</a><a href="#mcp">9. MCP</a><a href="#security">10. 安全</a><a href="#coding">11. Coding Agent</a></nav></aside>
+<div class="content">
+<section id="rag" class="hero reveal"><div class="eyebrow">应用系统主线</div><h1>RAG 与 Agent：让 LLM 连接外部世界</h1>
+<p class="lead">RAG 解决“模型不知道最新/私有知识”；Agent 解决“模型不能只回答，还要观察环境、调用工具、循环完成任务”。两者本质都在把<strong>参数内知识</strong>扩展成<strong>外部可获取状态与能力</strong>。</p>
+<div class="flow horizontal" style="--cols:6;margin-top:20px"><div class="step"><strong>Query</strong><span>用户问题</span></div><div class="step"><strong>Retrieve</strong><span>找相关资料</span></div><div class="step"><strong>Rerank</strong><span>精排证据</span></div><div class="step"><strong>LLM</strong><span>基于证据判断</span></div><div class="step"><strong>Tool / Action</strong><span>调用外部系统</span></div><div class="step"><strong>Loop</strong><span>观察结果继续</span></div></div></section>
+
+<section class="panel section reveal"><div class="section-head"><h2>1. 最基础 RAG Pipeline</h2><p>先把文档侧和查询侧分开看。</p></div>
+<div class="grid2">
+<div class="diagram"><div class="diagram-title">离线：建立知识库</div><div class="flow"><div class="step"><strong>Documents</strong><span>PDF / Wiki / DB</span></div><div class="step"><strong>Parse & Chunk</strong><span>结构化切分</span></div><div class="step"><strong>Embedding</strong><span>转向量</span></div><div class="step"><strong>Index</strong><span>Vector + BM25</span></div></div></div>
+<div class="diagram"><div class="diagram-title">在线：回答问题</div><div class="flow"><div class="step"><strong>Query</strong><span>用户问题</span></div><div class="step"><strong>Retrieve</strong><span>Top-K</span></div><div class="step"><strong>Rerank</strong><span>选真正相关证据</span></div><div class="step"><strong>LLM</strong><span>Answer + Citation</span></div></div></div>
+</div></section>
+
+<section id="chunk" class="panel section reveal"><div class="section-head"><h2>2. Chunking：为什么文档不能整篇直接做一个向量</h2><p>Chunk 粒度决定召回和上下文质量。</p></div>
+<div class="compare"><div class="side"><h3>Chunk 太小</h3><ul><li>语义被切碎</li><li>上下文缺失</li><li>召回到一句话但不知道章节背景</li></ul></div><div class="side"><h3>Chunk 太大</h3><ul><li>一个向量混太多主题</li><li>检索精度下降</li><li>Prompt token 成本上升</li></ul></div></div>
+<div class="pills"><span class="pill">固定 token</span><span class="pill">Overlap</span><span class="pill">按标题/段落</span><span class="pill">Semantic Chunk</span><span class="pill">Parent-Child Retrieval</span></div></section>
+
+<section id="retrieval" class="panel section reveal"><div class="section-head"><h2>3. Dense Retrieval 为什么还要配 BM25</h2><p>语义相似和关键词精确匹配是互补的。</p></div>
+<div class="grid3"><div class="card"><h3>Dense / Embedding</h3><p>擅长“表达不同但语义相近”。</p></div><div class="card"><h3>BM25</h3><p>擅长 ID、产品名、错误码、专业术语等精确词。</p></div><div class="card"><h3>Hybrid Search</h3><p>两路召回后做融合，再交给 Reranker。</p></div></div>
+<div class="callout info">企业 RAG 中“只上向量库”往往不够，尤其是日志、代码、产品编号和法律条款场景。</div></section>
+
+<section id="rerank" class="panel section reveal"><div class="section-head"><h2>4. Retriever 与 Reranker 分工不同</h2><p>第一阶段追求 Recall，第二阶段追求精确排序。</p></div>
+<div class="flow horizontal" style="--cols:4"><div class="step"><strong>100 万文档</strong><span>太多，不能全精排</span></div><div class="step"><strong>Retriever</strong><span>快速找 50 个</span></div><div class="step"><strong>Reranker</strong><span>精排成 Top 5</span></div><div class="step"><strong>LLM Context</strong><span>只放高质量证据</span></div></div></section>
+
+<section id="eval" class="panel section reveal"><div class="section-head"><h2>5. RAG 错了，先别怪 LLM</h2><p>完整链路每层都能出错。</p></div>
+<div class="flow horizontal" style="--cols:6"><div class="step"><strong>Query</strong><span>表达有歧义？</span></div><div class="step"><strong>Rewrite</strong><span>改坏了吗？</span></div><div class="step"><strong>Retrieve</strong><span>召回了吗？</span></div><div class="step"><strong>Rerank</strong><span>排对了吗？</span></div><div class="step"><strong>Context</strong><span>被截断了吗？</span></div><div class="step"><strong>LLM</strong><span>是否忠于证据？</span></div></div>
+<div class="grid2" style="margin-top:14px"><div class="card"><h3>Retrieval Eval</h3><p>Recall@K、Precision@K、MRR、nDCG。</p></div><div class="card"><h3>Generation Eval</h3><p>Correctness、Faithfulness、Citation Correctness、Completeness。</p></div></div></section>
+
+<section id="tool" class="panel section reveal"><div class="section-head"><h2>6. Tool Calling：模型只负责“提出调用”，Host 才真正执行</h2><p>这点是 Agent 工程边界的核心。</p></div>
+<div class="flow horizontal" style="--cols:5"><div class="step"><strong>User</strong><span>“查东京天气”</span></div><div class="step"><strong>LLM</strong><span>tool_call(get_weather)</span></div><div class="step"><strong>Host</strong><span>校验参数/权限</span></div><div class="step"><strong>Tool</strong><span>真正执行 HTTP/API</span></div><div class="step"><strong>LLM</strong><span>读 tool_result 再回答</span></div></div>
+<div class="callout bad">LLM 本身通常没有“魔法访问数据库”的能力。真正的文件、HTTP、数据库操作由 Host / Tool Runtime 执行。</div></section>
+
+<section id="agent" class="panel section reveal"><div class="section-head"><h2>7. Agent：从一次调用变成一个循环</h2><p>Agent 的本质不是 Prompt 更长，而是有状态、有工具、有 Loop。</p></div>
+<div class="grid2">
+<div class="diagram"><div class="stack"><div class="block blue">Goal</div><div class="down">↓</div><div class="block purple">Observe State</div><div class="down">↓</div><div class="block green">LLM Decide</div><div class="down">↓</div><div class="block orange">Tool / Action</div><div class="down">↓</div><div class="block">Tool Result</div><div class="down">↺</div></div></div>
+<div class="card"><h3>真正工程问题</h3><p>什么时候停止？工具失败怎么重试？Context 太长怎么办？状态怎么持久化？高风险操作谁批准？工具是否幂等？</p>
+<div class="pills"><span class="pill">Stop Condition</span><span class="pill">Retry</span><span class="pill">Timeout</span><span class="pill">Budget</span><span class="pill">Permission</span><span class="pill">Resume</span></div></div>
+</div>
+<div class="callout info"><strong>原则：</strong>确定性步骤交给代码；只有需要模糊判断、规划、语言理解的地方才交给模型。</div></section>
+
+<section id="memory" class="panel section reveal"><div class="section-head"><h2>8. Memory、State、Context 别混在一起</h2><p>“存到数据库”不代表模型就自动记住了。</p></div>
+<table><thead><tr><th>概念</th><th>是什么</th><th>模型当前能直接看到？</th></tr></thead><tbody>
+<tr><td>Context</td><td>本次模型调用真正输入的 tokens</td><td>能</td></tr>
+<tr><td>Session State</td><td>任务运行时结构化状态，如 runId、tool results、budget</td><td>只有注入 Context 才能</td></tr>
+<tr><td>Long-term Memory</td><td>数据库/向量库中的跨会话信息</td><td>必须检索/加载回来</td></tr>
+</tbody></table></section>
+
+<section id="mcp" class="panel section reveal"><div class="section-head"><h2>9. MCP：统一的是“怎么接工具”，不是“模型突然获得所有权限”</h2><p>它把 Host 与 Tool/Resource Server 的接口标准化。</p></div>
+<div class="flow horizontal" style="--cols:4"><div class="step"><strong>Agent / Host</strong><span>发现工具</span></div><div class="step"><strong>MCP Protocol</strong><span>统一调用格式</span></div><div class="step"><strong>MCP Server</strong><span>封装真实服务</span></div><div class="step"><strong>Git / DB / Files</strong><span>真正能力来源</span></div></div>
+<div class="callout warn">认证、权限、Secret、Sandbox 仍然必须由系统设计解决，协议本身不会自动消除安全问题。</div></section>
+
+<section id="security" class="panel section reveal"><div class="section-head"><h2>10. Prompt Injection：RAG / Agent 为什么比纯聊天更危险</h2><p>外部文档本身可能包含恶意指令。</p></div>
+<div class="grid4"><div class="card"><h3>Instruction/Data 分层</h3><p>检索到的文本只能作为数据，不能升级成系统指令。</p></div><div class="card"><h3>Least Privilege</h3><p>Tool 只给完成任务所需最小权限。</p></div><div class="card"><h3>Policy Engine</h3><p>真正权限边界用代码强制，而不是只靠 System Prompt。</p></div><div class="card"><h3>Human Approval</h3><p>转账、删除、发布等高风险动作需要人工确认。</p></div></div></section>
+
+<section id="coding" class="panel section reveal"><div class="section-head"><h2>11. Coding Agent：把所有知识合在一个真实例子里</h2><p>用户给 GitHub issue，Agent 自动搜代码、改代码、跑测试、输出 Patch。</p></div>
+<div class="flow horizontal" style="--cols:6"><div class="step"><strong>Issue</strong><span>任务目标</span></div><div class="step"><strong>Search / Read</strong><span>构建局部 Context</span></div><div class="step"><strong>Edit</strong><span>修改代码</span></div><div class="step"><strong>Test</strong><span>环境反馈</span></div><div class="step"><strong>Loop</strong><span>失败继续定位</span></div><div class="step"><strong>Verifier</strong><span>Hidden Tests / Patch</span></div></div>
+<div class="grid4" style="margin-top:14px"><div class="card"><h3>Sandbox</h3><p>限制 shell、网络、文件、CPU/Memory。</p></div><div class="card"><h3>State</h3><p>task_id、workspace、base_commit、patch、tool_calls。</p></div><div class="card"><h3>Context</h3><p>Code Search、Selective Read、Summary、Compression。</p></div><div class="card"><h3>Eval</h3><p>Resolved Rate、Tests、Tokens、Tool Calls、Latency、Cost。</p></div></div>
+</section>
+<footer>核心图文化学习页已打通：Transformer → Training → Inference → RAG / Agent</footer>
+</div></main><script src="assets/site.js"></script></body></html>
