@@ -1,126 +1,318 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>02 · 网络分层、封装与 OS 收发包</title>
-<style>
-:root{--bg:#f5f8fc;--card:#fff;--ink:#102647;--muted:#60728c;--line:#d9e4f0;--blue:#2d66ef;--b:#eef4ff;--g:#edf9f2;--o:#fff4e8;--p:#f4efff;--dark:#10182d}
-*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#eef5fb,#fff);font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--ink)}main{max-width:1180px;margin:auto;padding:30px 22px 80px}
-.hero,.panel{background:#fff;border:1px solid var(--line);border-radius:26px;box-shadow:0 16px 48px rgba(35,66,110,.08)}.hero{padding:32px}h1{font-size:40px;margin:0 0 10px}h2{font-size:28px;margin:42px 0 16px}h3{font-size:18px;margin:0 0 10px}.sub{color:var(--muted);font-size:18px;line-height:1.75}.note{margin-top:18px;background:var(--dark);color:#fff;border-radius:15px;padding:15px 17px;line-height:1.65}
-.nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.nav a{color:#2159c9;text-decoration:none;border:1px solid #c5d5e8;padding:9px 12px;border-radius:11px;background:#fff;font-weight:600}
-.four,.grid3,.grid2{display:grid;gap:14px}.four{grid-template-columns:repeat(4,1fr)}.grid3{grid-template-columns:repeat(3,1fr)}.grid2{grid-template-columns:repeat(2,1fr)}
-.card{border:1px solid var(--line);background:#fff;border-radius:19px;padding:18px}.card p{color:var(--muted);line-height:1.65;margin:6px 0 0}.tag{display:inline-block;font-size:12px;border-radius:999px;padding:4px 8px;background:#eaf2ff;color:#235bc8;margin-bottom:8px}
-.stack{display:flex;flex-direction:column;gap:8px;max-width:650px;margin:0 auto}.layer{padding:15px 18px;border-radius:14px;border:1px solid var(--line);text-align:center;font-weight:700}.blue{background:var(--b)}.green{background:var(--g)}.orange{background:var(--o)}.purple{background:var(--p)}
-.arrow{text-align:center;color:var(--blue);font-weight:900}.swim{display:grid;grid-template-columns:1fr 1.35fr 1fr;gap:14px}.lane{border:1px solid var(--line);border-radius:20px;background:#fff;padding:16px}.step{padding:11px 12px;border-radius:12px;border:1px solid #dce5f0;margin:9px 0;font-size:14px;line-height:1.5}
-.packet{font-family:Consolas,monospace;background:#0e172a;color:#dbe7ff;border-radius:18px;padding:20px;line-height:1.7;overflow:auto}
-.metric{font-size:30px;font-weight:800}.small{font-size:13px;color:var(--muted)}
-footer{text-align:center;color:var(--muted);margin-top:40px;font-size:13px}
-@media(max-width:900px){.four,.grid3,.grid2,.swim{grid-template-columns:1fr}h1{font-size:31px}}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>02｜网络分层、封装与 OS 收发包</title>
+  <link rel="stylesheet" href="./assets/course.css">
 </head>
-<body><main>
-<section class="hero">
-<span class="tag">Phase 2</span>
-<h1>网络分层、封装与 OS 收发包</h1>
-<p class="sub">这一页只回答一件事：浏览器调用 send() 之后，字节如何从用户态穿过 Socket、TCP、IP、Route、Neighbor、驱动、DMA 和 NIC，最后真的离开电脑。</p>
-<div class="note">重要：协议层次、数据封装、本机实现路径、网络设备路径是四张不同的图。把它们混成一张竖线，是初学网络最常见的认知错误之一。</div>
-<div class="nav"><a href="./README.md">总目录</a><a href="./02-network-model-and-packets.md">完整 Markdown 正文</a><a href="./01-url-to-webpage.md">上一章</a><a href="./PLAN.md">计划</a></div>
-</section>
+<body>
+<div class="page">
+  <aside class="toc">
+    <h2>02 · OS 收发包</h2>
+    <p>这一章回答：应用调用 send() 之后，字节到底怎么一路走到网卡？接收方向又怎么回来？</p>
+    <a href="#hero">0. 学习目标</a>
+    <a href="#four-views">1. 四种“层次”</a>
+    <a href="#layers">2. OSI / TCP-IP</a>
+    <a href="#send">3. send() 之后</a>
+    <a href="#mtu">4. MSS / MTU</a>
+    <a href="#route">5. Route / Neighbor / Link</a>
+    <a href="#kernel-path">6. qdisc / Driver / DMA</a>
+    <a href="#offload">7. GSO / TSO / GRO</a>
+    <a href="#receive">8. 接收路径</a>
+    <a href="#summary">9. 一页总结</a>
+  </aside>
 
-<h2>1 · 四种图，回答四个问题</h2>
-<div class="four">
-<div class="card"><span class="tag">协议分层</span><h3>谁负责什么语义？</h3><p>HTTP / TCP / IP / Link 分别承担不同职责。</p></div>
-<div class="card"><span class="tag">封装</span><h3>线上字节长什么样？</h3><p>HTTP 数据被 TLS、TCP、IP、L2 一层层包住。</p></div>
-<div class="card"><span class="tag">本机实现</span><h3>代码在哪运行？</h3><p>User Process → Kernel → Driver → NIC。</p></div>
-<div class="card"><span class="tag">设备路径</span><h3>包经过谁？</h3><p>Laptop → Router → ISP → Server。</p></div>
-</div>
+  <main class="content">
+    <section class="hero" id="hero">
+      <span class="badge">Chapter 02 · From Process to NIC</span>
+      <h1>网络分层、封装与 OS 收发包：<br>数据到底怎么从进程走到网卡？</h1>
+      <p class="lead">这一章把“协议分层”从抽象名词变成真实执行路径：<b>用户态程序 → Socket → TCP → IP → Route → Neighbor → qdisc → Driver → DMA → NIC</b>，再反方向走回应用。</p>
+      <div class="hero-grid">
+        <div class="mini-card">
+          <h3>这一章重点</h3>
+          <ul>
+            <li>分清“协议层、封装层、本机实现路径、空间路径”四种不同图。</li>
+            <li>理解 send() 不是“立刻把数据扔到网线”。</li>
+            <li>理解 MTU、MSS、GSO/TSO/GRO 与抓包差异。</li>
+          </ul>
+        </div>
+        <div class="mini-card">
+          <h3>最终你应该能说清</h3>
+          <ul>
+            <li>fd、Socket Object、TCP Connection 的关系。</li>
+            <li>Kernel 如何根据四元组把收到的数据交给正确 Socket。</li>
+            <li>为什么网卡、驱动、DMA、Ring Buffer 都会出现在网络课里。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="top-links"><a href="./01-url-to-webpage.html">上一章</a><a href="./02-network-model-and-packets.md">完整 Markdown</a><a href="./03-ip-routing-arp-nat.html">下一章</a></div>
+    </section>
 
-<h2>2 · 封装不是“设备顺序”</h2>
-<div class="stack">
-<div class="layer blue">HTTP bytes</div><div class="arrow">↓ TLS 加密</div>
-<div class="layer purple">TLS Record</div><div class="arrow">↓ TCP</div>
-<div class="layer green">TCP Segment</div><div class="arrow">↓ IP</div>
-<div class="layer orange">IP Packet</div><div class="arrow">↓ Link</div>
-<div class="layer">L2 Frame → NIC</div>
-</div>
+    <section class="section" id="four-views">
+      <span class="eyebrow">先分清你在看哪一种图</span>
+      <h2>1. 四种“层次”不能混成一张图</h2>
+      <div class="grid-4">
+        <div class="grid-card"><span class="tag blue">协议分层</span><h3>谁负责什么语义？</h3><p>HTTP、TLS、TCP、IP、Link 各自解决什么问题。</p></div>
+        <div class="grid-card"><span class="tag green">封装层次</span><h3>外面套了什么头？</h3><p>应用数据如何变成 TLS Record、TCP Segment、IP Packet、L2 Frame。</p></div>
+        <div class="grid-card"><span class="tag orange">本机实现路径</span><h3>谁真正执行代码？</h3><p>Process、syscall、Kernel、qdisc、Driver、NIC。</p></div>
+        <div class="grid-card"><span class="tag purple">网络空间路径</span><h3>经过哪些设备？</h3><p>Laptop → Router → ISP → Internet → Server。</p></div>
+      </div>
+      <div class="callout"><div class="icon">!</div><div><strong>最常见误区</strong><div>“HTTP 在 TLS 上面”是协议分层；“Browser 在 Kernel 上面”是实现路径；“Laptop 到 Router”是空间路径。它们不是同一个维度。</div></div></div>
+    </section>
 
-<h2>3 · send() 之后的真实发送路径</h2>
-<div class="swim">
-<div class="lane"><h3>User Space</h3>
-<div class="step blue">Browser HTTP Stack</div><div class="arrow">↓</div>
-<div class="step blue">TLS Library<br>产生 TLS records</div><div class="arrow">↓</div>
-<div class="step blue">send(fd, data)</div>
-</div>
-<div class="lane"><h3>Kernel Space</h3>
-<div class="step">Socket / Send Buffer</div><div class="arrow">↓</div>
-<div class="step green">TCP<br>seq / ack / MSS / window</div><div class="arrow">↓</div>
-<div class="step orange">IP + Route Lookup</div><div class="arrow">↓</div>
-<div class="step orange">Netfilter / Policy</div><div class="arrow">↓</div>
-<div class="step orange">Neighbor<br>ARP / NDP</div><div class="arrow">↓</div>
-<div class="step">qdisc / TX queue</div><div class="arrow">↓</div>
-<div class="step">NIC Driver / TX Ring</div>
-</div>
-<div class="lane"><h3>Hardware</h3>
-<div class="step purple">DMA mapping</div><div class="arrow">↓</div>
-<div class="step purple">NIC</div><div class="arrow">↓</div>
-<div class="step purple">Wire / Radio</div>
-</div>
-</div>
+    <section class="section" id="layers">
+      <span class="eyebrow">分层模型</span>
+      <h2>2. TCP/IP 四层与 OSI 七层：核心不是背层数，而是理解职责边界</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag blue">TCP/IP 视角</span>
+          <div class="codebox">Application
+HTTP / TLS / DNS / RPC
+        ↓
+Transport
+TCP / UDP / QUIC*
+        ↓
+Internet
+IP / ICMP
+        ↓
+Link
+Ethernet / Wi-Fi</div>
+          <p>工程中更常直接按 TCP/IP 体系讨论。QUIC 的实现位置特殊，但承担大量 Transport 职责。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag purple">OSI 视角</span>
+          <div class="codebox">7 Application
+6 Presentation
+5 Session
+4 Transport
+3 Network
+2 Data Link
+1 Physical</div>
+          <p>OSI 更适合作为“职责分类模型”。现实协议不会总严格一一落在某一层。</p>
+        </div>
+      </div>
+      <div class="callout"><div class="icon">i</div><div><strong>为什么要分层？</strong><div>因为每层只承诺自己的接口与语义。应用不需要知道网卡 DMA 细节，Router 也不需要理解你的 JSON 业务字段。</div></div></div>
+    </section>
 
-<h2>4 · send() 返回，不代表“对面已经收到”</h2>
-<div class="grid3">
-<div class="card"><b>应用层</b><p>send() 常常只表示内核接受了待发送数据。</p></div>
-<div class="card"><b>内核层</b><p>数据还可能排在 Socket buffer、拥塞控制、qdisc 或 Driver queue 中。</p></div>
-<div class="card"><b>网络层</b><p>真正送达还需要链路、路由、对端 TCP 接收与 ACK。</p></div>
-</div>
+    <section class="section" id="send">
+      <span class="eyebrow">发送方向</span>
+      <h2>3. send() 的真正含义：把数据交给内核，不是立刻上网</h2>
+      <div class="flow">
+        <div class="step">Application / Browser</div>
+        <div class="arrow">↓ send() / write()</div>
+        <div class="step">System Call</div>
+        <div class="arrow">↓</div>
+        <div class="step">Kernel Socket Send Buffer</div>
+        <div class="arrow">↓</div>
+        <div class="step">TCP：分段 / Seq / ACK / Flow / Congestion</div>
+        <div class="arrow">↓</div>
+        <div class="step">IP：src / dst / TTL / Route</div>
+        <div class="arrow">↓</div>
+        <div class="step">Neighbor + Link Header</div>
+        <div class="arrow">↓</div>
+        <div class="step">qdisc → Driver → DMA → NIC</div>
+      </div>
+      <div class="grid-3" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">fd</span><p>进程手里的整数句柄，用来引用内核对象。</p></div>
+        <div class="grid-card"><span class="tag green">Socket Object</span><p>Kernel 里的网络对象，包含 buffer、地址、状态等。</p></div>
+        <div class="grid-card"><span class="tag orange">TCP Connection</span><p>由本地/远端 endpoint 和 TCP state 共同定义的连接状态，不等于一个 fd。</p></div>
+      </div>
+    </section>
 
-<h2>5 · MTU 与 MSS</h2>
-<div class="grid3">
-<div class="card"><span class="small">Ethernet 常见示例</span><div class="metric">1500</div><p>MTU：常见以太网 L3 payload 上限示例。</p></div>
-<div class="card"><span class="small">IPv4 无 options</span><div class="metric">20 B</div><p>基础 IPv4 Header 示例。</p></div>
-<div class="card"><span class="small">TCP 无 options</span><div class="metric">≈1460</div><p>典型 MSS = 1500 - 20 - 20。不是固定常量。</p></div>
-</div>
+    <section class="section" id="mtu">
+      <span class="eyebrow">数据大小边界</span>
+      <h2>4. MSS 与 MTU：为什么不能“无限大一个包发出去”</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag blue">MTU</span>
+          <h3>限制当前链路承载的 IP Packet 大小</h3>
+          <p>例如 Ethernet 常见 MTU 1500。它不是 TCP 独有概念。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag green">MSS</span>
+          <h3>限制 TCP Payload 大小</h3>
+          <p>典型 IPv4 情况可近似理解为 MTU - IP Header - TCP Header，因此常见约 1460 字节。</p>
+        </div>
+      </div>
+      <div class="codebox" style="margin-top:14px">应用数据
+   ↓
+TCP 依据 MSS 切分
+   ↓
+TCP Segment
+   ↓
+IP Header
+   ↓
+IP Packet ≤ Path / Link MTU
+   ↓
+L2 Frame</div>
+      <div class="callout"><div class="icon">!</div><div><strong>为什么更希望 TCP 分段，而不是依赖 IP Fragmentation？</strong><div>因为 Fragmentation 增加中间网络复杂度与丢片风险，现代网络更倾向通过 MSS / PMTU Discovery 在发送端控制合适大小。</div></div></div>
+    </section>
 
-<h2>6 · Frame 里面到底套了什么</h2>
-<div class="packet">
-Ethernet / L2 Frame
-├── L2 Header
-└── IP Packet
-    ├── IP Header
-    └── TCP Segment
-        ├── TCP Header
-        └── TLS Record bytes
-            └── encrypted HTTP data
-</div>
+    <section class="section" id="route">
+      <span class="eyebrow">内核网络层</span>
+      <h2>5. Route / Neighbor / Link：知道目标 IP 后还没结束</h2>
+      <div class="grid-3">
+        <div class="grid-card"><span class="tag blue">Route</span><h3>目标 IP → 出接口 / 下一跳</h3><p>Kernel 查路由表，做最长前缀匹配，决定从哪张网卡、往哪个 next hop 发送。</p></div>
+        <div class="grid-card"><span class="tag orange">Neighbor</span><h3>下一跳 IP → 链路地址</h3><p>IPv4 Ethernet 常用 ARP；IPv6 使用 NDP。</p></div>
+        <div class="grid-card"><span class="tag green">Link</span><h3>构造当前一跳 Frame</h3><p>这一层目标 MAC 只对当前链路有效；跨 Router 后会重新构造下一跳 L2 Header。</p></div>
+      </div>
+      <div class="codebox" style="margin-top:14px">TCP Segment
+   ↓
+IP Packet
+   ↓
+Route Lookup
+   ↓
+Next Hop
+   ↓
+ARP / NDP
+   ↓
+L2 Header
+   ↓
+Frame</div>
+    </section>
 
-<h2>7 · Driver / Ring / DMA / NIC 是什么关系</h2>
-<div class="grid2">
-<div class="card"><span class="tag">TX</span><h3>发送</h3><p>Kernel packet → qdisc → Driver → TX descriptors → DMA → NIC → 物理介质。Descriptor Ring 可以理解成驱动交给网卡的一圈“任务单”。</p></div>
-<div class="card"><span class="tag">RX</span><h3>接收</h3><p>NIC → DMA 到 RX buffers → RX Ring → interrupt/NAPI → 协议栈 → Socket receive buffer → recv() → 应用。</p></div>
-</div>
+    <section class="section" id="kernel-path">
+      <span class="eyebrow">Kernel 到 NIC</span>
+      <h2>6. qdisc、Driver、Descriptor Ring、DMA：软件怎样真的把数据交给网卡？</h2>
+      <div class="flow">
+        <div class="step">Kernel 网络栈得到待发送 Packet</div>
+        <div class="arrow">↓</div>
+        <div class="step">Netfilter / Firewall（按系统路径可能参与）</div>
+        <div class="arrow">↓</div>
+        <div class="step">qdisc：排队 / 调度 / 整形</div>
+        <div class="arrow">↓</div>
+        <div class="step">NIC Driver</div>
+        <div class="arrow">↓</div>
+        <div class="step">TX Descriptor Ring</div>
+        <div class="arrow">↓ DMA</div>
+        <div class="step">NIC 读取内存中的 Packet Data</div>
+        <div class="arrow">↓</div>
+        <div class="step">Physical / Wi-Fi Transmission</div>
+      </div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card"><span class="tag purple">sk_buff</span><p>Linux 内核中常见的网络数据结构，用来携带 Packet 及其元数据。它是实现细节，不是协议本身。</p></div>
+        <div class="grid-card"><span class="tag orange">DMA</span><p>让 NIC 与内存之间搬运数据时尽量减少 CPU 逐字节复制负担。Driver 负责设置 Descriptor，NIC 直接读写内存区域。</p></div>
+      </div>
+    </section>
 
-<h2>8 · 为什么高性能网络要 NAPI / Offload</h2>
-<div class="grid3">
-<div class="card"><b>NAPI</b><p>避免每个包都硬中断 CPU，使用“通知 + 批量轮询”处理高包速接收。</p></div>
-<div class="card"><b>GSO / TSO</b><p>发送方向把分段工作推迟到更低层或 NIC，降低 CPU 开销。</p></div>
-<div class="card"><b>GRO</b><p>接收方向把多个相邻小包合并成更大的逻辑对象供协议栈处理。</p></div>
-</div>
+    <section class="section" id="offload">
+      <span class="eyebrow">性能优化</span>
+      <h2>7. 为什么抓包里看到的“包大小”有时和线上不一样？</h2>
+      <div class="grid-3">
+        <div class="grid-card">
+          <span class="tag blue">GSO</span>
+          <h3>Generic Segmentation Offload</h3>
+          <p>Kernel 先用较大的逻辑 Packet 表示数据，晚一些再拆分。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag green">TSO</span>
+          <h3>TCP Segmentation Offload</h3>
+          <p>部分 TCP 分段工作交给 NIC 完成，减轻 CPU 处理负担。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag purple">GRO</span>
+          <h3>Generic Receive Offload</h3>
+          <p>接收方向把多个 Packet 合并成较大单元再交给上层，减少协议栈处理次数。</p>
+        </div>
+      </div>
+      <div class="callout"><div class="icon">i</div><div><strong>抓包位置决定你看到什么</strong><div>如果抓包点在 offload 前后不同位置，你看到的 Packet 边界和大小就可能不同。不要机械把抓包软件里的一行等同于“线缆上真实一帧”。</div></div></div>
+    </section>
 
-<h2>9 · 收包时，内核怎么找到 Chrome？</h2>
-<div class="stack">
-<div class="layer purple">NIC 收到 Frame</div><div class="arrow">↓</div>
-<div class="layer">DMA / RX Ring / NAPI</div><div class="arrow">↓</div>
-<div class="layer orange">L2 → IP</div><div class="arrow">↓</div>
-<div class="layer green">TCP connection lookup</div><div class="arrow">↓</div>
-<div class="layer">Socket Receive Buffer</div><div class="arrow">↓ recv()</div>
-<div class="layer blue">Browser / TLS decrypt / HTTP parse</div>
-</div>
+    <section class="section" id="receive">
+      <span class="eyebrow">接收方向</span>
+      <h2>8. 网卡收到 Frame 后，怎么一路找到 Browser？</h2>
+      <div class="flow">
+        <div class="step">NIC 收到 Frame</div>
+        <div class="arrow">↓ DMA</div>
+        <div class="step">RX Ring / Memory Buffer</div>
+        <div class="arrow">↓</div>
+        <div class="step">Driver / NAPI Poll</div>
+        <div class="arrow">↓</div>
+        <div class="step">L2 → IP → TCP Processing</div>
+        <div class="arrow">↓</div>
+        <div class="step">根据四元组 / Connection State 定位 Socket</div>
+        <div class="arrow">↓</div>
+        <div class="step">Socket Receive Buffer</div>
+        <div class="arrow">↓ read()/recv()</div>
+        <div class="step">Browser / Application</div>
+      </div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card"><span class="tag orange">为什么不用每包一个硬中断？</span><p>高 PPS 下频繁硬中断成本很高。Linux 常通过 NAPI 在“中断通知 + 批量轮询”之间折中处理。</p></div>
+        <div class="grid-card"><span class="tag green">为什么能找到正确 Socket？</span><p>Kernel 根据协议、local/remote IP/port 和 TCP state 等信息做 demultiplexing，把数据送到对应 Socket receive buffer。</p></div>
+      </div>
+    </section>
 
-<h2>10 · 记忆模型</h2>
-<div class="card">
-<p><b>应用</b>只把字节交给 Socket；<b>内核</b>负责 TCP/IP、路由和邻居；<b>驱动</b>负责把 packet 交给网卡；<b>NIC</b>借助 DMA 与硬件队列真正发送和接收。</p>
-</div>
+    <section class="summary" id="summary">
+      <h2>9. 一页总结：从 send() 到 NIC，再从 NIC 回到应用</h2>
+      <div class="codebox">【发送】
+Application
+ ↓ send()
+Syscall
+ ↓
+Socket Send Buffer
+ ↓
+TCP
+ ↓
+IP
+ ↓
+Route
+ ↓
+Neighbor
+ ↓
+L2
+ ↓
+qdisc
+ ↓
+Driver
+ ↓
+TX Ring / DMA
+ ↓
+NIC
+ ↓
+Network
 
-<footer>正文、实验、自测与准确性说明请看 02-network-model-and-packets.md</footer>
-</main></body></html>
+【接收】
+Network
+ ↓
+NIC
+ ↓
+RX Ring / DMA
+ ↓
+Driver / NAPI
+ ↓
+L2
+ ↓
+IP
+ ↓
+TCP
+ ↓
+Socket Demux
+ ↓
+Receive Buffer
+ ↓
+Application</div>
+      <div class="grid-2" style="margin-top:18px">
+        <div>
+          <h3>这一章最该记住</h3>
+          <ol class="checklist">
+            <li>send() 是把数据交给内核，不等于立即上网。</li>
+            <li>MSS 控 TCP payload，MTU 控链路/IP Packet 尺寸边界。</li>
+            <li>Route 找下一跳，Neighbor 找当前链路地址。</li>
+            <li>qdisc、Driver、DMA、Ring 都是实现路径，不是协议层。</li>
+            <li>接收方向需要根据连接状态把 Packet demux 到正确 Socket。</li>
+          </ol>
+        </div>
+        <div>
+          <h3>下一章放大</h3>
+          <div class="pill-list">
+            <span class="pill">IP</span><span class="pill">CIDR</span><span class="pill">Route</span>
+            <span class="pill">ARP / NDP</span><span class="pill">ICMP</span><span class="pill">NAT / PAT</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>
