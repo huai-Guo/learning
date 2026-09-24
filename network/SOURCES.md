@@ -94,6 +94,22 @@ QUIC Transport：
 
 - RFC 9000: https://www.rfc-editor.org/rfc/rfc9000
 
+QPACK：
+
+- RFC 9204: https://www.rfc-editor.org/rfc/rfc9204
+
+WebSocket：
+
+- RFC 6455: https://www.rfc-editor.org/rfc/rfc6455
+
+WebSocket over HTTP/2：
+
+- RFC 8441: https://www.rfc-editor.org/rfc/rfc8441
+
+WebSocket over HTTP/3：
+
+- RFC 9220: https://www.rfc-editor.org/rfc/rfc9220
+
 ---
 
 # 3. 本项目会主动强调的准确性问题
@@ -117,3 +133,11 @@ QUIC Transport：
 17. Root CA 通常来自本地 Trust Store；Server 通常发送 Leaf + Intermediate，而不是把 Root 当作每次握手必发证书。
 18. TLS 1.3 不写成“永远只有 ECDHE”；恢复场景允许 PSK / PSK+(EC)DHE，0-RTT 必须提示 Replay 风险。
 19. HTTPS 明确区分“保护 HTTP 内容”与“仍可暴露 IP、大小、时序等 metadata”，经典 SNI 与传统 DNS 也可能泄露 hostname。
+20. HTTP/2 的 Multiplexing 解决 HTTP 层并发限制，但 TCP 仍是一条全局有序 Byte Stream，会产生 TCP-level HOL。
+21. QUIC 不写成“UDP 自动可靠”；ACK、Loss Recovery、Flow/Congestion Control 与 Stream Reliability 都由 QUIC 实现。
+22. QUIC Packet Number 与 Stream Offset 分开解释；重传可靠信息时不复用原 Packet Number。
+23. Connection ID 不替代 IP/UDP；Connection Migration 还必须考虑 Path Validation 与新的路径状态。
+24. HTTP/2 Server Push 区分“标准曾支持”与“现代浏览器实际采用情况”，不再作为今天的核心卖点。
+25. WebSocket 是应用层双向消息协议，不写成 Socket API，也不写成 HTTP/2/3 的替代品。
+26. RPC 定义为调用模型/框架集合，不写成固定网络协议；gRPC、Thrift、HTTP、TCP/QUIC 必须按层比较。
+27. Retry 必须和 Deadline、Idempotency / Deduplication 一起讨论，不能把网络超时等同于远端业务未执行。
