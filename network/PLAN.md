@@ -449,82 +449,33 @@ Browser
 
 ---
 
-# 10. Phase 8｜动手实验
+# 10. 当前阶段｜视觉化统一与阅读体验打磨
 
-文件：08-labs.md
+用户明确不继续新增第 08 章实验章节。当前目标调整为：
 
-Windows 为第一路线，同时给 Linux 对照。
+> **把 01～07 已有内容做成统一、美观、图文并茂、计算机小白也容易顺着读下去的视觉课程。**
 
-## DNS
+当前视觉化要求：
 
-- nslookup
-- ipconfig /displaydns
-- ipconfig /flushdns
-- hosts
+- [x] 01～07 使用统一浅色视觉体系
+- [x] 每章提供左侧目录导航
+- [x] 每章使用统一 Hero / Section / Card / Callout / Codebox 组件
+- [x] 复杂流程优先使用文字图、流程图、时序布局，而不是只堆文字
+- [x] 每章保留 Markdown 正文作为完整知识真源
+- [x] HTML 负责降低阅读门槛与提高复习效率
+- [x] index.html 改为统一视觉课程首页
+- [x] 01 补齐 HTML 视觉版
+- [x] 02～07 统一到相同视觉规范
+- [x] 抽取共享样式到 assets/course.css
 
-## IP / Route / ARP
+后续只做已有章节的视觉与教学质量优化，包括：
 
-- ipconfig /all
-- route print
-- arp -a
-- ping
-- tracert
-
-Linux 对照：
-
-- ip addr
-- ip route
-- ip neigh
-- dig
-- traceroute
-
-## TCP / TLS / HTTP
-
-- netstat / ss
-- curl -v
-- openssl s_client
-- 浏览器 DevTools
-- Wireshark
-
-每个实验必须写：
-
-~~~text
-执行什么
- ↓
-看哪一列
- ↓
-它证明了母图里的哪一步
- ↓
-看到异常意味着什么
-~~~
-
----
-
-# 11. Phase 9｜面试与复盘
-
-文件：09-review-and-interview.md
-
-不做孤立八股题库，按因果链组织：
-
-- 域名为什么不是 IP + Port
-- DNS 为什么分层
-- Stub Resolver / Recursive Resolver
-- 为什么先 Route 后 ARP
-- 为什么 ARP 不一定找网关
-- 为什么 MAC 每一跳会变
-- NAT 与 PAT 的关系
-- 为什么公网返回包能回到正确内网进程
-- 临时端口属于谁管理
-- TCP 四元组
-- 三次握手为什么三次
-- TIME_WAIT
-- TCP Keepalive vs HTTP Keep-Alive
-- TLS 中 ECDHE key share 与证书公钥区别
-- CA 为什么不每次实时审批
-- SNI / Host / :authority 区别
-- HTTP/2 与 HTTP/3
-- WebSocket 与 HTTP
-- RPC 与 HTTP
+- 调整章节节奏与信息密度
+- 增加必要的对比卡片 / 因果流程图 / 状态图
+- 减少连续大段文字
+- 提升初学者理解路径
+- 对容易混淆的概念增加“不要混”的视觉提醒
+- 统一术语、配色、间距、导航和章节收束方式
 
 ---
 
