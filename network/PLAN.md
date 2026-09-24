@@ -389,6 +389,30 @@ Browser ↔ Server
 
 # 9. Phase 7｜真实后端网络拓扑
 
+状态：**第一版已完成并落库**
+
+- [x] Markdown 正文：07-backend-network-topology.md
+- [x] HTML 视觉版：07-backend-network-topology.html
+- [x] DNS → CDN / Edge → Origin 的真实入口关系
+- [x] CDN Cache Hit / Miss / 回源
+- [x] WAF vs Network Firewall
+- [x] L4 vs L7 Load Balancer
+- [x] TLS Termination / Re-encrypt / Passthrough
+- [x] Nginx / Envoy / API Gateway 的职责边界
+- [x] Reverse Proxy vs Forward Proxy
+- [x] X-Forwarded-For / Forwarded / Trusted Proxy Boundary
+- [x] PROXY Protocol 与 HTTP Header 的层次区别
+- [x] 公网 HTTP → 内网 RPC 的协议切换
+- [x] Service Discovery → Endpoint Set → Load Balancing
+- [x] Client-side / Server-side / Sidecar LB
+- [x] Connection Pool / Keepalive / Idle Timeout / Drain
+- [x] Deadline Budget / Retry Storm / Circuit Breaker / Load Shedding
+- [x] Redis / MySQL 私网访问与连接池
+- [x] Readiness / Liveness / Graceful Shutdown
+- [x] mTLS / Service Mesh / North-South / East-West
+- [x] Trace ID 与 TCP / QUIC Connection ID 的边界
+- [x] 502 / 503 / 504 与分层排障
+
 文件：07-backend-network-topology.md
 
 贯穿：
