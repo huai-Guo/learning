@@ -158,6 +158,18 @@ Route
 
 # 5. Phase 3｜IP、子网、路由、ARP/NDP、NAT
 
+状态：**第一版已完成并落库**
+
+- [x] Markdown 正文：03-ip-routing-arp-nat.md
+- [x] HTML 视觉版：03-ip-routing-arp-nat.html
+- [x] CIDR / 子网 / 最长前缀匹配 / 默认路由
+- [x] 同网段 vs 异网段，Route → ARP/NDP
+- [x] Switch MAC Table 与 Route Table 的边界
+- [x] Control Plane / Data Plane / BGP / FIB 入门
+- [x] TTL / Hop Limit / ICMP / ping / traceroute
+- [x] SNAT / DNAT / PAT / NAPT / Conntrack
+- [x] NAT 返回路径、CGNAT、IPv6 与 NAT/firewall 边界
+
 文件：03-ip-routing-arp-nat.md
 
 核心问题：
