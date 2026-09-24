@@ -1,173 +1,341 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>05 · HTTP / HTTPS / TLS</title>
-<style>
-:root{--bg:#f5f8fc;--card:#fff;--ink:#102647;--muted:#60728c;--line:#d9e4f0;--blue:#2d66ef;--b:#eef4ff;--g:#edf9f2;--o:#fff4e8;--p:#f4efff;--r:#fff0f0;--dark:#10182d}
-*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#eef5fb,#fff);font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--ink)}main{max-width:1180px;margin:auto;padding:30px 22px 80px}
-.hero{background:#fff;border:1px solid var(--line);border-radius:28px;padding:32px;box-shadow:0 16px 48px rgba(35,66,110,.08)}
-h1{font-size:40px;margin:0 0 10px}h2{font-size:28px;margin:42px 0 16px}h3{font-size:18px;margin:0 0 10px}.sub{font-size:18px;line-height:1.75;color:var(--muted)}
-.note{margin-top:18px;background:var(--dark);color:#fff;padding:15px 17px;border-radius:15px;line-height:1.65}.nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.nav a{color:#225dce;text-decoration:none;border:1px solid #c7d7e8;padding:9px 12px;border-radius:11px;background:#fff;font-weight:600}
-.grid2,.grid3,.grid4{display:grid;gap:14px}.grid2{grid-template-columns:repeat(2,1fr)}.grid3{grid-template-columns:repeat(3,1fr)}.grid4{grid-template-columns:repeat(4,1fr)}
-.card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:18px}.card p{color:var(--muted);line-height:1.65;margin:6px 0 0}.tag{display:inline-block;font-size:12px;padding:4px 8px;border-radius:999px;background:#eaf2ff;color:#245bcc;margin-bottom:8px}
-.flow{display:flex;flex-direction:column;align-items:center;gap:8px}.step{width:min(780px,100%);padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:#fff;text-align:center;font-weight:700}.blue{background:var(--b)}.green{background:var(--g)}.orange{background:var(--o)}.purple{background:var(--p)}.red{background:var(--r)}.arrow{color:var(--blue);font-weight:900}
-.packet{background:#0f182d;color:#dbe6ff;border-radius:18px;padding:20px;font-family:Consolas,monospace;white-space:pre-wrap;line-height:1.7;overflow:auto}
-.table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden}.table th,.table td{padding:12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.table th{background:#f3f7fc}
-.timeline{display:grid;grid-template-columns:1fr 80px 1fr;gap:10px}.lane{border:1px solid var(--line);border-radius:20px;background:#fff;padding:16px}.msg{padding:11px 12px;border-radius:12px;border:1px solid #dce5f0;margin:9px 0;line-height:1.5}.mid{text-align:center;color:var(--blue);font-weight:800;padding-top:36px}.mid div{margin:32px 0}
-footer{text-align:center;color:var(--muted);font-size:13px;margin-top:40px}
-@media(max-width:900px){.grid2,.grid3,.grid4,.timeline{grid-template-columns:1fr}.mid{display:none}h1{font-size:31px}}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>05｜HTTP / HTTPS / TLS</title>
+  <link rel="stylesheet" href="./assets/course.css">
 </head>
-<body><main>
-<section class="hero">
-<span class="tag">Phase 5</span>
-<h1>HTTP / HTTPS / TLS</h1>
-<p class="sub">从 HTTP 请求语义一路讲到 TLS 1.3、证书链、ECDHE、CertificateVerify、Finished 和 Session Resumption。重点不是背消息名，而是搞清楚：谁在证明谁、哪把钥匙干什么、哪个阶段开始加密。</p>
-<div class="note"><b>一句话：</b>HTTP 负责业务语义；TLS 负责身份、机密性和完整性；TCP 负责可靠有序地搬运 TLS 字节。</div>
-<div class="nav"><a href="./README.md">总目录</a><a href="./05-http-https-tls.md">完整 Markdown</a><a href="./04-tcp-udp.html">上一章</a><a href="./PLAN.md">计划</a></div>
-</section>
+<body>
+<div class="page">
+  <aside class="toc">
+    <h2>05 · HTTP / TLS</h2>
+    <p>这一章把业务语义、安全握手、证书身份和密钥协商放进同一条 HTTPS 链。</p>
+    <a href="#hero">0. 学习目标</a>
+    <a href="#http">1. HTTP Request / Response</a>
+    <a href="#host">2. Host / SNI / :authority</a>
+    <a href="#state">3. Cookie / Session / Cache</a>
+    <a href="#crypto">4. 四种密码学能力</a>
+    <a href="#keys">5. 两类公钥</a>
+    <a href="#ca">6. CA / Certificate Chain</a>
+    <a href="#tls13">7. TLS 1.3 主握手</a>
+    <a href="#resume">8. Resumption / 0-RTT</a>
+    <a href="#boundary">9. HTTPS 的边界</a>
+    <a href="#summary">10. 一页总结</a>
+  </aside>
 
-<h2>1 · 三层职责</h2>
-<div class="grid3">
-<div class="card"><span class="tag">HTTP</span><h3>业务语义</h3><p>Method、Path、Header、Body、Status、Cache、Cookie、认证相关字段。</p></div>
-<div class="card"><span class="tag">TLS</span><h3>安全通道</h3><p>身份认证、密钥建立、机密性、完整性、握手完整性和会话恢复。</p></div>
-<div class="card"><span class="tag">TCP</span><h3>可靠字节流</h3><p>负责把 TLS 产生的字节可靠、有序送达，不理解 HTTP 业务语义。</p></div>
-</div>
+  <main class="content">
+    <section class="hero" id="hero">
+      <span class="badge">Chapter 05 · Secure HTTP</span>
+      <h1>HTTP / HTTPS / TLS：<br>浏览器到底发了什么，TLS 又如何保证“看不懂、改不了、冒充不了”？</h1>
+      <p class="lead">把三个职责先分开：<b>HTTP 定义业务语义，TLS 负责身份、机密性和完整性，TCP 负责可靠有序地搬运 TLS 字节</b>。真正理解 HTTPS，关键不是背消息名，而是搞清“哪把钥匙干什么、谁在证明谁”。</p>
+      <div class="hero-grid">
+        <div class="mini-card">
+          <h3>这一章最重要的两组区分</h3>
+          <ul>
+            <li>ECDHE ephemeral key ≠ Certificate identity key。</li>
+            <li>Certificate Signature ≠ CertificateVerify ≠ Finished。</li>
+          </ul>
+        </div>
+        <div class="mini-card">
+          <h3>两条时间线</h3>
+          <ul>
+            <li>网站部署前：CA 签发证书。</li>
+            <li>用户访问时：Browser 与 Server 完成 TLS 1.3 握手。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="top-links"><a href="./04-tcp-udp.html">上一章</a><a href="./05-http-https-tls.md">完整 Markdown</a><a href="./06-modern-protocols.html">下一章</a></div>
+    </section>
 
-<h2>2 · 一个 HTTP/1.1 Request</h2>
-<div class="packet">GET /products?lang=zh-CN HTTP/1.1
+    <section class="section" id="http">
+      <span class="eyebrow">业务语义</span>
+      <h2>1. HTTP：到底怎样表达一次 Request / Response？</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag blue">Request</span>
+          <div class="codebox">GET /products?lang=zh-CN HTTP/1.1
 Host: shop.example.com
 Accept: text/html
-Accept-Encoding: gzip
 Cookie: session_id=abc123
 
 Request Line
 → Headers
 → 空行
 → Optional Body</div>
+        </div>
+        <div class="grid-card">
+          <span class="tag green">Response</span>
+          <div class="codebox">HTTP/1.1 200 OK
+Content-Type: text/html
+Content-Length: 12580
+Cache-Control: max-age=60
+Set-Cookie: session_id=abc123
 
-<h2>3 · Host、SNI、:authority 不要混</h2>
-<table class="table">
-<tr><th>阶段</th><th>字段/概念</th><th>作用</th></tr>
-<tr><td>DNS</td><td>hostname</td><td>把 shop.example.com 解析成地址候选</td></tr>
-<tr><td>TLS</td><td>SNI</td><td>让共享 IP:443 的 TLS 端选择对应站点证书和配置</td></tr>
-<tr><td>HTTP/1.1</td><td>Host</td><td>让 HTTP 层选择虚拟站点/路由</td></tr>
-<tr><td>HTTP/2 / 3</td><td>:authority</td><td>承担 authority/host 角色</td></tr>
-</table>
+<html>...</html></div>
+        </div>
+      </div>
+      <div class="grid-3" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">Method</span><p>表达资源操作语义。GET/POST 的核心区别不是“参数放 URL 还是 Body”。</p></div>
+        <div class="grid-card"><span class="tag orange">Status</span><p>2xx 成功、3xx 重定向/缓存、4xx 客户端/权限、5xx Server/Gateway 等异常。</p></div>
+        <div class="grid-card"><span class="tag purple">Header</span><p>承载 Host、Content-Type、Cookie、Authorization、Cache-Control 等元数据。</p></div>
+      </div>
+      <div class="callout"><div class="icon">i</div><div><strong>Safe 与 Idempotent 不是同一个概念</strong><div>Safe 关注“语义上是否意图修改状态”；Idempotent 关注“重复执行是否保持相同目标效果”。</div></div></div>
+    </section>
 
-<h2>4 · HTTP/1.1 为什么需要 Framing</h2>
-<div class="grid3">
-<div class="card"><b>TCP 是 Byte Stream</b><p>一次 recv 并不天然对应一个完整 HTTP Message。</p></div>
-<div class="card"><b>Content-Length</b><p>告诉对端 Body 到底有多少字节。</p></div>
-<div class="card"><b>Chunked</b><p>HTTP/1.1 可通过 chunked transfer coding 逐块传输未知总长度内容。</p></div>
-</div>
+    <section class="section" id="host">
+      <span class="eyebrow">同一个域名在不同协议层出现</span>
+      <h2>2. DNS hostname、TLS SNI、HTTP Host / :authority 不要混</h2>
+      <table>
+        <thead><tr><th>阶段</th><th>字段 / 概念</th><th>作用</th></tr></thead>
+        <tbody>
+          <tr><td>DNS</td><td>hostname</td><td>把 shop.example.com 解析成地址候选。</td></tr>
+          <tr><td>TLS</td><td>SNI</td><td>让共享 IP:443 的 TLS 端知道要选择哪个站点证书和配置。</td></tr>
+          <tr><td>HTTP/1.1</td><td>Host</td><td>让 HTTP Server / Reverse Proxy 选择虚拟站点或路由。</td></tr>
+          <tr><td>HTTP/2 / 3</td><td>:authority</td><td>承担 authority / host 语义。</td></tr>
+        </tbody>
+      </table>
+      <div class="codebox" style="margin-top:14px">URL:
+https://shop.example.com/products
 
-<h2>5 · Cookie 与 Session</h2>
-<div class="flow">
-<div class="step blue">Set-Cookie: session_id=abc123</div><div class="arrow">↓</div>
-<div class="step blue">Browser 保存 Cookie</div><div class="arrow">↓</div>
-<div class="step orange">后续请求 Cookie: session_id=abc123</div><div class="arrow">↓</div>
-<div class="step green">Server 查 Session Store</div><div class="arrow">↓</div>
-<div class="step green">user_id / cart / roles / state</div>
-</div>
+DNS hostname:
+shop.example.com
 
-<h2>6 · HTTPS 为什么存在</h2>
-<div class="grid3">
-<div class="card"><span class="tag">Confidentiality</span><h3>看不懂</h3><p>旁观者不能直接读取 HTTP 内容。</p></div>
-<div class="card"><span class="tag">Integrity</span><h3>改不了</h3><p>被篡改的受保护数据能够被检测出来。</p></div>
-<div class="card"><span class="tag">Authentication</span><h3>冒充不了</h3><p>Browser 能验证当前 Server 是否持有目标 hostname 对应可信身份私钥。</p></div>
-</div>
+TLS SNI:
+shop.example.com
 
-<h2>7 · 四种密码学能力</h2>
-<div class="grid4">
-<div class="card"><b>Symmetric</b><p>高效保护大量数据，例如 AES-GCM、ChaCha20-Poly1305。</p></div>
-<div class="card"><b>Public-key</b><p>Private/Public Key 体系，用于签名、身份认证等。</p></div>
-<div class="card"><b>Hash</b><p>单向摘要，不是加密，也没有“解密 Hash”。</p></div>
-<div class="card"><b>Signature</b><p>Private Key 签名、Public Key 验证，不是“私钥加密、公钥解密”。</p></div>
-</div>
+Certificate SAN:
+shop.example.com
 
-<h2>8 · TLS 中两类“公钥”</h2>
-<div class="grid2">
-<div class="card purple"><span class="tag">Key Establishment</span><h3>ECDHE Ephemeral Key Share</h3><p>Client 和 Server 每次连接生成临时密钥材料，用于得到 Shared Secret。</p></div>
-<div class="card green"><span class="tag">Identity</span><h3>Certificate Public Key</h3><p>用来验证 Server 对当前 Handshake Transcript 的 CertificateVerify 签名。</p></div>
-</div>
+HTTP Host / :authority:
+shop.example.com</div>
+      <div class="callout"><div class="icon">!</div><div><strong>值相同，不代表它们是同一个字段</strong><div>它们发生在不同协议阶段、解决不同问题。DNS 为寻址，SNI 为 TLS 虚拟主机选择，Host / :authority 为 HTTP 目标站点选择。</div></div></div>
+    </section>
 
-<h2>9 · CA 有两条时间线</h2>
-<div class="grid2">
-<div class="card"><span class="tag">网站部署前</span><h3>CA 签证书</h3><p>Site 申请证书，CA 验证控制权并签发，Server 提前部署 Certificate、Intermediate 和 Private Key。</p></div>
-<div class="card"><span class="tag">用户访问时</span><h3>Browser ↔ Server</h3><p>Server 发证书链，Browser 本地验链、验 hostname、验 CertificateVerify；不是每次实时问 CA 是否批准。</p></div>
-</div>
+    <section class="section" id="state">
+      <span class="eyebrow">HTTP 状态与缓存</span>
+      <h2>3. Cookie、Session、Cache：为什么 HTTP 可以“记住你”？</h2>
+      <div class="grid-3">
+        <div class="grid-card">
+          <span class="tag blue">Cookie</span>
+          <div class="codebox">Set-Cookie:
+session_id=abc123;
+Secure;
+HttpOnly;
+SameSite=Lax</div>
+          <p>Browser 按规则保存，并在匹配请求中自动带上。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag green">Session</span>
+          <div class="codebox">Cookie:
+session_id=abc123
+      ↓
+Server Session Store
+      ↓
+user_id / cart / roles</div>
+          <p>Session 是 Server 侧会话状态模型，Cookie 只是客户端携带的标识或状态载体。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag orange">Cache</span>
+          <div class="codebox">Cache-Control: max-age=60
 
-<h2>10 · Certificate Chain</h2>
-<div class="flow">
-<div class="step green">Server Certificate / Leaf</div><div class="arrow">↓ signed by</div>
-<div class="step green">Intermediate CA</div><div class="arrow">↓ chains to</div>
-<div class="step blue">Trusted Root CA</div><div class="arrow">↓</div>
-<div class="step blue">Local Trust Store</div>
-</div>
+ETag: "v42"
+If-None-Match: "v42"
+      ↓
+304 Not Modified</div>
+          <p>Freshness 与条件请求让 Browser 不必每次都下载完整资源。</p>
+        </div>
+      </div>
+      <div class="callout"><div class="icon">i</div><div><strong>Secure / HttpOnly / SameSite 解决不同问题</strong><div>Secure 控制安全传输，HttpOnly 限制普通前端 JS 读取 Cookie，SameSite 控制跨站请求携带策略。</div></div></div>
+    </section>
 
-<h2>11 · Certificate Signature 与 CertificateVerify</h2>
-<div class="grid2">
-<div class="card"><b>Certificate Signature</b><p>CA Private Key 签 Server Certificate，表示 CA 对证书中的身份与 Public Key 做背书。</p></div>
-<div class="card"><b>CertificateVerify</b><p>Server 用证书对应 Private Key 签当前 TLS Handshake Transcript，证明当前握手方真的持有 Private Key。</p></div>
-</div>
+    <section class="section" id="crypto">
+      <span class="eyebrow">密码学最小模型</span>
+      <h2>4. Symmetric、Public-key、Hash、Signature：必须先分开</h2>
+      <div class="grid-4">
+        <div class="grid-card"><span class="tag green">Symmetric</span><h3>高效保护大量数据</h3><p>例如 AES-GCM、ChaCha20-Poly1305。适合真正的 Application Data。</p></div>
+        <div class="grid-card"><span class="tag blue">Public-key</span><h3>Public / Private Key</h3><p>用于签名、身份认证、密钥建立等场景。</p></div>
+        <div class="grid-card"><span class="tag purple">Hash</span><h3>单向摘要</h3><p>不是 Encryption，也不存在“把 Hash 解密回来”。</p></div>
+        <div class="grid-card"><span class="tag orange">Digital Signature</span><h3>Private Key 签，Public Key 验</h3><p>不要用“私钥加密、公钥解密”理解签名。</p></div>
+      </div>
+      <div class="callout"><div class="icon">i</div><div><strong>为什么 HTTPS 大量流量不用公钥直接加密？</strong><div>非对称算法更昂贵。TLS 用它来做身份与密钥建立，再派生高效的对称 AEAD Traffic Keys 保护大量业务数据。</div></div></div>
+    </section>
 
-<h2>12 · TLS 1.3 主握手</h2>
-<div class="timeline">
-<div class="lane">
-<h3>Browser</h3>
-<div class="msg blue">ClientHello<br>SNI / ALPN offers / cipher suites / key_share</div>
-<div class="msg">ECDHE + HKDF<br>派生 Handshake Traffic Keys</div>
-<div class="msg green">验证 Certificate Chain / SAN</div>
-<div class="msg green">验证 CertificateVerify</div>
-<div class="msg green">验证 Server Finished</div>
-<div class="msg blue">Client Finished</div>
-<div class="msg blue">Encrypted HTTP Request</div>
-</div>
-<div class="mid"><div>→</div><div>←</div><div>←</div><div>←</div><div>←</div><div>→</div><div>→</div></div>
-<div class="lane">
-<h3>Server</h3>
-<div class="msg orange">ServerHello<br>selected suite / server key_share</div>
-<div class="msg orange">EncryptedExtensions</div>
-<div class="msg orange">Certificate</div>
-<div class="msg orange">CertificateVerify</div>
-<div class="msg orange">Finished</div>
-<div class="msg">Application Traffic Keys</div>
-<div class="msg green">Encrypted HTTP Response</div>
-</div>
-</div>
+    <section class="section" id="keys">
+      <span class="eyebrow">两类“公钥”</span>
+      <h2>5. TLS 里最容易混的东西：ECDHE Key Share ≠ Certificate Public Key</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag blue">ECDHE Ephemeral Key Share</span>
+          <div class="codebox">Client ephemeral key pair
+          +
+Server ephemeral key pair
+          ↓
+ECDHE
+          ↓
+Shared Secret
+          ↓
+HKDF
+          ↓
+Handshake / Application Keys</div>
+          <p>解决：这一次连接怎样安全建立 Shared Secret，并提供 Forward Secrecy。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag orange">Certificate Identity Key</span>
+          <div class="codebox">Server Identity Private Key
+        ↓
+sign Handshake Transcript
+        ↓
+CertificateVerify
 
-<h2>13 · Finished 和 CertificateVerify 不是一个作用</h2>
-<div class="grid2">
-<div class="card"><b>CertificateVerify</b><p>证明当前 Server 持有证书对应 Private Key，属于身份绑定。</p></div>
-<div class="card"><b>Finished</b><p>证明双方对 Handshake Transcript 和 Key Schedule 理解一致，握手未被悄悄篡改。</p></div>
-</div>
+Certificate Public Key
+        ↓
+verify</div>
+          <p>解决：当前握手方是否真的持有这个证书对应的身份 Private Key。</p>
+        </div>
+      </div>
+      <div class="callout"><div class="icon">!</div><div><strong>一句话</strong><div><b>ECDHE 负责“怎么安全得到密钥”，Certificate key 负责“你到底是谁”。</b></div></div></div>
+    </section>
 
-<h2>14 · TLS 1.3 Cipher Suite 到底描述什么？</h2>
-<div class="card"><p>TLS 1.3 的 Cipher Suite 主要描述 <b>AEAD + Hash</b>，例如 TLS_AES_128_GCM_SHA256。ECDHE Group 和 Signature Algorithm 在其他协商中选择，不再像 TLS 1.2 那样全部塞进一个超长名字。</p></div>
+    <section class="section" id="ca">
+      <span class="eyebrow">证书信任</span>
+      <h2>6. CA / Certificate Chain：为什么 Browser 会相信这个 Server？</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag purple">时间线 A · 网站部署前</span>
+          <div class="codebox">Site / Operator
+  ↓ CSR + Domain Control
+CA / Intermediate CA
+  ↓ verify
+Signed Server Certificate
+  ↓
+Deploy:
+Certificate
+Private Key
+Intermediate Chain</div>
+          <p>CA 主要发生在证书签发阶段，而不是每次用户访问时实时批准。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag green">时间线 B · 用户访问时</span>
+          <div class="codebox">Server sends:
+Leaf Certificate
+Intermediate Certificate(s)
 
-<h2>15 · Session Resumption 与 0-RTT</h2>
-<div class="grid2">
-<div class="card"><span class="tag">Resumption</span><h3>PSK / Ticket</h3><p>复用之前安全会话派生出的恢复状态，减少完整证书握手的网络和计算成本。</p></div>
-<div class="card red"><span class="tag">0-RTT</span><h3>Early Data</h3><p>可以更早发送应用数据，但存在 Replay 风险。不能把不可安全重放的业务操作随意放进 0-RTT。</p></div>
-</div>
+Browser has:
+Trusted Root CA
+in local Trust Store</div>
+          <p>Browser 构造并验证从 Leaf → Intermediate → Trusted Root 的认证路径。</p>
+        </div>
+      </div>
+      <div class="flow">
+        <div class="step">Server / Leaf Certificate</div>
+        <div class="arrow">↓ CA signature</div>
+        <div class="step">Intermediate CA</div>
+        <div class="arrow">↓ chain</div>
+        <div class="step">Trusted Root CA</div>
+        <div class="arrow">↓</div>
+        <div class="step">Local Trust Store</div>
+      </div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">Certificate Signature</span><p>CA 用 CA Private Key 签证书，证明它对证书里的身份和 Public Key 做了签发背书。</p></div>
+        <div class="grid-card"><span class="tag orange">CertificateVerify</span><p>Server 用证书对应 Private Key 签当前 Handshake Transcript，证明当前握手方真的持有该 Private Key。</p></div>
+      </div>
+    </section>
 
-<h2>16 · HTTPS 加密什么，没加密什么？</h2>
-<div class="grid2">
-<div class="card green"><b>通常被 TLS 保护</b><p>HTTP Method、Path、Headers、Cookie、Authorization、Body、Response Body。</p></div>
-<div class="card orange"><b>仍需暴露/可推断的网络信息</b><p>IP、packet size、timing、TCP/UDP metadata；经典 TLS 中 SNI 也可能可见，传统 DNS 也可能泄露 hostname。</p></div>
-</div>
+    <section class="section" id="tls13">
+      <span class="eyebrow">TLS 1.3 主线</span>
+      <h2>7. TLS 1.3：先协商密钥，再完成身份与握手完整性验证</h2>
+      <div class="timeline">
+        <div class="lane">
+          <h3>Browser</h3>
+          <div class="msg blue">ClientHello<br>SNI / ALPN / cipher suites / key_share</div>
+          <div class="msg">ECDHE + HKDF</div>
+          <div class="msg green">Verify Certificate Chain / SAN</div>
+          <div class="msg green">Verify CertificateVerify</div>
+          <div class="msg green">Verify Server Finished</div>
+          <div class="msg blue">Client Finished</div>
+          <div class="msg blue">Encrypted HTTP</div>
+        </div>
+        <div class="mid"><div>→</div><div>←</div><div>←</div><div>←</div><div>←</div><div>→</div><div>→</div></div>
+        <div class="lane">
+          <h3>Server</h3>
+          <div class="msg orange">ServerHello<br>selected suite / server key_share</div>
+          <div class="msg orange">EncryptedExtensions</div>
+          <div class="msg orange">Certificate</div>
+          <div class="msg orange">CertificateVerify</div>
+          <div class="msg orange">Finished</div>
+          <div class="msg">Application Traffic Keys</div>
+          <div class="msg green">Encrypted HTTP Response</div>
+        </div>
+      </div>
+      <div class="grid-3" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">ClientHello</span><p>客户端提供 versions、cipher suites、SNI、ALPN、key_share、signature_algorithms 等候选能力。</p></div>
+        <div class="grid-card"><span class="tag green">ServerHello</span><p>Server 选择版本、cipher suite 与 key_share。此后双方可派生 Handshake Traffic Keys。</p></div>
+        <div class="grid-card"><span class="tag orange">Encrypted Handshake</span><p>TLS 1.3 正常流程中，ServerHello 之后的 EncryptedExtensions、Certificate、CertificateVerify、Finished 已受握手密钥保护。</p></div>
+      </div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card"><span class="tag purple">CertificateVerify</span><p>证明“我持有证书对应 Private Key”。</p></div>
+        <div class="grid-card"><span class="tag green">Finished</span><p>确认双方对 Handshake Transcript 和 Key Schedule 理解一致，握手未被悄悄篡改。</p></div>
+      </div>
+      <div class="callout"><div class="icon">i</div><div><strong>TLS 1.3 Cipher Suite 主要表达 AEAD + Hash</strong><div>例如 <code>TLS_AES_128_GCM_SHA256</code>。Key Exchange 与 Signature Algorithm 不再全部塞进同一个 cipher suite 名字里。</div></div></div>
+    </section>
 
-<h2>17 · TLS 认证服务器，不等于认证用户</h2>
-<div class="grid2">
-<div class="card"><b>TLS Server Authentication</b><p>当前 Server 是否持有 shop.example.com 对应可信 Certificate Private Key？</p></div>
-<div class="card"><b>Application Authentication</b><p>当前用户是谁？通常由 Cookie、Session、Bearer Token、OAuth 等业务机制解决。</p></div>
-</div>
+    <section class="section" id="resume">
+      <span class="eyebrow">握手优化</span>
+      <h2>8. Session Resumption / PSK / 0-RTT：为什么第二次连接可以更快？</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag blue">Resumption</span>
+          <div class="codebox">Full Handshake
+ ↓
+derive resumption state / PSK
+ ↓
+Next Connection
+ ↓
+ClientHello + PSK identity / binder
+ ↓
+Server accepts
+ ↓
+shorter handshake</div>
+          <p>目标是减少网络往返和证书/签名计算成本。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag red">0-RTT Early Data</span>
+          <div class="codebox">ClientHello
++
+Early Application Data
+      ↓
+Server processes before
+new handshake fully completes</div>
+          <p>优势是低延迟，风险是 Replay。像“扣款”这种不可安全重放的操作不能随便放进 0-RTT。</p>
+        </div>
+      </div>
+      <div class="callout"><div class="icon">!</div><div><strong>TLS 1.3 不等于“永远只有 ECDHE”</strong><div>完整认证握手常见使用 (EC)DHE；恢复场景还可以使用 PSK 或 PSK+(EC)DHE。</div></div></div>
+    </section>
 
-<h2>18 · 记忆模型</h2>
-<div class="packet">HTTP
+    <section class="section" id="boundary">
+      <span class="eyebrow">安全边界</span>
+      <h2>9. HTTPS 能保护什么，又不能保护什么？</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag green">TLS 通常保护</span>
+          <p>HTTP Method、Path、Headers、Cookie、Authorization、Body、Response Body 等业务内容。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag orange">仍可暴露 / 推断</span>
+          <p>IP、packet size、timing、TCP/UDP metadata；经典 TLS 中 SNI 也可能被观察，传统 DNS 也可能泄露 hostname。</p>
+        </div>
+      </div>
+      <div class="grid-3" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">TLS Authentication</span><p>回答：我连接的 Server 是否持有目标 hostname 对应可信证书 Private Key？</p></div>
+        <div class="grid-card"><span class="tag purple">Application Authentication</span><p>回答：当前用户是谁？通常由 Cookie、Session、Bearer Token、OAuth 等解决。</p></div>
+        <div class="grid-card"><span class="tag red">HTTPS 不解决</span><p>SQL Injection、XSS、Broken Access Control、弱密码、Server 被入侵等应用安全问题。</p></div>
+      </div>
+    </section>
+
+    <section class="summary" id="summary">
+      <h2>10. 一页总结：HTTPS 真正的组合方式</h2>
+      <div class="codebox">HTTP
 → 业务语义
 
 TLS
@@ -175,15 +343,43 @@ TLS
 → CertificateVerify
 → (EC)DHE / PSK
 → HKDF
+→ Finished
 → AEAD Traffic Keys
 
 TCP
 → 可靠有序字节流
 
 最关键：
-ECDHE Ephemeral Key ≠ Certificate Identity Key
-Certificate Signature ≠ CertificateVerify
-CA 签发时间线 ≠ 用户握手时间线</div>
+ECDHE Ephemeral Key
+≠ Certificate Identity Key
 
-<footer>完整正文、实验、自测、0-RTT、OCSP、ECH 与 HTTP 缓存细节见 05-http-https-tls.md</footer>
-</main></body></html>
+Certificate Signature
+≠ CertificateVerify
+≠ Finished
+
+CA 签发时间线
+≠ 用户运行时 TLS 握手时间线</div>
+      <div class="grid-2" style="margin-top:18px">
+        <div>
+          <h3>这一章最该记住</h3>
+          <ol class="checklist">
+            <li>HTTP 定义业务语义，TLS 负责安全通道。</li>
+            <li>数字签名不是“私钥加密、公钥解密”。</li>
+            <li>ECDHE 和证书身份密钥解决不同问题。</li>
+            <li>Server 通常发送 Leaf + Intermediate，Root 通常来自本地 Trust Store。</li>
+            <li>CertificateVerify 与 Finished 作用不同。</li>
+          </ol>
+        </div>
+        <div>
+          <h3>下一章放大</h3>
+          <div class="pill-list">
+            <span class="pill">HTTP/2</span><span class="pill">HOL</span><span class="pill">QUIC</span>
+            <span class="pill">HTTP/3</span><span class="pill">WebSocket</span><span class="pill">RPC</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>
