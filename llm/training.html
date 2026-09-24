@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LLM Training 图解</title><link rel="stylesheet" href="assets/site.css"></head>
+<body>
+<header class="topbar"><div class="topbar-inner"><div class="brand"><div class="brand-badge">TR</div><div>Pretraining / Post-training 图解</div></div>
+<div class="toplinks"><a href="index.html">总览</a><a href="transformer.html">上一章</a><a href="inference-serving.html">下一章</a></div></div></header>
+<main class="shell">
+<aside class="sidebar"><h3>本页导航</h3><p>重点不是背算法名，而是理解一个随机模型怎样一步步变成 Chat / Reasoning Model。</p>
+<nav class="sidenav"><a href="#life">1. 生命周期</a><a href="#data">2. 数据</a><a href="#tokenizer">3. Tokenizer</a><a href="#pretrain">4. Pretraining</a><a href="#base">5. Base Model</a><a href="#sft">6. SFT</a><a href="#pref">7. Preference</a><a href="#ppo">8. PPO</a><a href="#dpo">9. DPO</a><a href="#grpo">10. GRPO</a><a href="#reject">11. Rejection Sampling</a><a href="#compare">12. 总对比</a></nav></aside>
+<div class="content">
+<section id="life" class="hero reveal"><div class="eyebrow">训练生命周期总览</div><h1>一个 LLM 是怎样“练出来”的</h1>
+<p class="lead">最重要的主线是：<strong>海量数据 → Pretraining → Base Model → SFT → Preference / RL → Chat / Reasoning Model</strong>。预训练负责“会语言、懂世界”，后训练负责“会按要求做事”。</p>
+<div class="flow horizontal" style="--cols:6;margin-top:20px">
+<div class="step"><strong>Raw Data</strong><span>网页 / 书籍 / 代码</span></div><div class="step"><strong>Pretraining</strong><span>Next Token Prediction</span></div><div class="step"><strong>Base Model</strong><span>强续写器</span></div><div class="step"><strong>SFT</strong><span>学会指令与格式</span></div><div class="step"><strong>Preference / RL</strong><span>学会什么答案更好</span></div><div class="step"><strong>Final Model</strong><span>Chat / Reasoning</span></div>
+</div></section>
+
+<section id="data" class="panel section reveal"><div class="section-head"><h2>2. 训练前，真正花大力气的是数据</h2><p>不是“把互联网下载下来就开始训”。</p></div>
+<div class="grid4">
+<div class="card"><h3>清洗</h3><p>HTML 噪声、模板、乱码、低质量文本、spam。</p></div>
+<div class="card"><h3>去重</h3><p>减少记忆、重复训练和 benchmark 污染。</p></div>
+<div class="card"><h3>质量过滤</h3><p>语言、领域、代码质量、来源与许可证。</p></div>
+<div class="card"><h3>数据配比</h3><p>中文、英文、代码、数学、网页等比例会影响最终能力。</p></div>
+</div>
+<div class="callout info"><strong>面试加分点：</strong>训练问题经常不是模型结构问题，而是数据分布、重复、污染、质量和 curriculum 问题。</div></section>
+
+<section id="tokenizer" class="panel section reveal"><div class="section-head"><h2>3. Tokenizer：文字为什么要先切成 Token</h2><p>模型只接受离散 token ID，不直接读字符串。</p></div>
+<div class="grid2">
+<div class="diagram"><div class="diagram-title">示意</div><div class="flow">
+<div class="step"><strong>"unbelievable"</strong><span>原始字符串</span></div><div class="step"><strong>un / believ / able</strong><span>Subword</span></div><div class="step"><strong>421 / 9821 / 731</strong><span>Token IDs</span></div><div class="step"><strong>Embedding</strong><span>查表得到向量</span></div></div></div>
+<div class="card"><h3>词表不是越大越好</h3><p>词表太小 → 文本被切得碎，sequence 变长；词表太大 → Embedding/LM Head 变大，稀有 token 难学。</p>
+<div class="pills"><span class="pill">BPE</span><span class="pill">WordPiece</span><span class="pill">Unigram</span><span class="pill">SentencePiece</span></div></div>
+</div></section>
+
+<section id="pretrain" class="panel section reveal"><div class="section-head"><h2>4. Pretraining：最简单的目标，逼出最复杂的能力</h2><p>Decoder LLM 的经典目标就是 Next Token Prediction。</p></div>
+<div class="grid2">
+<div class="diagram"><div class="diagram-title">训练样本其实自动就有标签</div><div class="stack">
+<div class="block blue">中国</div><div class="down">↓ 预测</div><div class="block">的</div>
+<div class="block blue">中国 的</div><div class="down">↓ 预测</div><div class="block">首都</div>
+<div class="block blue">中国 的 首都 是</div><div class="down">↓ 预测</div><div class="block green">北京</div>
+</div></div>
+<div class="card"><h3>为什么只猜下一个词也能学知识？</h3><p>要把“爱因斯坦提出了___”补对，模型必须形成关于人物、物理和语言的内部表示；要把 Python 函数续写对，就必须学代码语法与模式。</p>
+<div class="callout warn">所以能力不是显式写进程序，而是为了降低 Loss，在海量数据上被“逼着学出来”。</div></div>
+</div></section>
+
+<section id="base" class="panel section reveal"><div class="section-head"><h2>5. Base Model：已经很聪明，但还不一定“会当助手”</h2><p>它更像极强的文本续写器。</p></div>
+<div class="compare"><div class="side"><h3>Base Model</h3><ul><li>知道很多知识</li><li>能续写文本和代码</li><li>可能不稳定遵循用户指令</li><li>不一定遵循聊天格式</li></ul></div>
+<div class="side"><h3>Chat / Instruct Model</h3><ul><li>更稳定回答问题</li><li>会遵循格式和约束</li><li>具备偏好与安全行为</li><li>更适合 Tool Calling / Agent</li></ul></div></div></section>
+
+<section id="sft" class="panel section reveal"><div class="section-head"><h2>6. SFT：给它“标准答案”让它模仿</h2><p>SFT = Supervised Fine-Tuning。</p></div>
+<div class="grid2"><div class="diagram"><div class="stack"><div class="block blue">User：解释 TCP 三次握手</div><div class="down">↓</div><div class="block green">Assistant：高质量标准回答</div><div class="down">↓</div><div class="block orange">继续做 Next Token Loss</div></div></div>
+<div class="card"><h3>SFT 主要学什么？</h3><p>对话模板、instruction following、固定输出格式、领域任务、工具调用 schema、风格。</p>
+<div class="callout info"><strong>关键：</strong>SFT 仍然是监督式模仿，它擅长告诉模型“好答案长什么样”，但不天然表达“两个答案谁更好”。</div></div></div></section>
+
+<section id="pref" class="panel section reveal"><div class="section-head"><h2>7. Preference：从“模仿答案”升级到“比较答案”</h2><p>这一步是理解 RLHF / DPO 的入口。</p></div>
+<div class="flow horizontal" style="--cols:4">
+<div class="step"><strong>Prompt</strong><span>同一个问题</span></div><div class="step"><strong>Answer A / B</strong><span>两个候选</span></div><div class="step"><strong>Preference</strong><span>A &gt; B</span></div><div class="step"><strong>Optimization</strong><span>提高更好答案概率</span></div>
+</div>
+<div class="callout info">偏好来源可以是人类、AI Judge、规则、测试结果或可验证 reward。</div></section>
+
+<section id="ppo" class="panel section reveal"><div class="section-head"><h2>8. 经典 RLHF + PPO</h2><p>先学一个“裁判”，再让模型通过强化学习争取更高 reward。</p></div>
+<div class="flow horizontal" style="--cols:5"><div class="step"><strong>Prompt</strong><span>问题</span></div><div class="step"><strong>Policy</strong><span>生成回答</span></div><div class="step"><strong>Reward Model</strong><span>打分</span></div><div class="step"><strong>PPO</strong><span>计算更新</span></div><div class="step"><strong>Better Policy</strong><span>更偏向高 reward</span></div></div>
+<div class="callout warn">PPO 工程复杂：Policy、Reference、Reward、Value、Rollout、Advantage 都可能参与。</div></section>
+
+<section id="dpo" class="panel section reveal"><div class="section-head"><h2>9. DPO：不用把 Reward Model 放进在线训练环</h2><p>直接利用 chosen / rejected 偏好对。</p></div>
+<div class="grid2">
+<div class="card white"><h3>Chosen</h3><p>模型应该提高这个回答相对概率。</p></div>
+<div class="card white"><h3>Rejected</h3><p>模型应该降低这个回答相对概率。</p></div>
+</div>
+<div class="callout info"><strong>DPO 的工程吸引力：</strong>训练流程比经典 RM + PPO 简洁很多，但它仍然是在做 preference optimization。</div></section>
+
+<section id="grpo" class="panel section reveal"><div class="section-head"><h2>10. GRPO：同一道题，多采样几个答案做组内比较</h2><p>非常适合数学、代码等有 Verifiable Reward 的任务。</p></div>
+<div class="grid2"><div class="diagram"><div class="stack"><div class="block blue">同一 Prompt</div><div class="down">↓</div><div class="block">Answer 1 / 2 / 3 / 4</div><div class="down">↓</div><div class="block green">Reward：0 / 1 / 1 / 0.6</div><div class="down">↓</div><div class="block orange">组内相对优势</div></div></div>
+<div class="card"><h3>为什么特别适合 Reasoning？</h3><p>数学最终答案、代码 unit tests 都能自动验证。模型可以大量探索，再用程序反馈强化正确轨迹。</p></div></div></section>
+
+<section id="reject" class="panel section reveal"><div class="section-head"><h2>11. Rejection Sampling：生成很多，留下好的再学</h2><p>它不是 DPO/PPO 的同义词。</p></div>
+<div class="flow horizontal" style="--cols:4"><div class="step"><strong>Generate N</strong><span>多样采样</span></div><div class="step"><strong>Judge / Tests</strong><span>评分或验证</span></div><div class="step"><strong>Keep Best</strong><span>拒掉差样本</span></div><div class="step"><strong>Train Again</strong><span>构造下一轮训练数据</span></div></div></section>
+
+<section id="compare" class="panel section reveal"><div class="section-head"><h2>12. 面试最终总表</h2><p>最容易混淆的几个词放一起看。</p></div>
+<table><thead><tr><th>阶段</th><th>输入信号</th><th>学到什么</th><th>直觉</th></tr></thead><tbody>
+<tr><td>Pretraining</td><td>海量原始文本</td><td>语言/知识/代码模式</td><td>“把下一个 token 猜对”</td></tr>
+<tr><td>SFT</td><td>高质量问答</td><td>遵循指令与格式</td><td>“模仿好答案”</td></tr>
+<tr><td>DPO</td><td>Chosen / Rejected</td><td>偏好对齐</td><td>“A 比 B 好”</td></tr>
+<tr><td>PPO/RLHF</td><td>Reward</td><td>优化长期策略</td><td>“争取高分”</td></tr>
+<tr><td>GRPO 类</td><td>组内相对 Reward</td><td>Reasoning / 可验证任务</td><td>“同题多答，组内比较”</td></tr>
+<tr><td>Rejection Sampling</td><td>候选 + Judge</td><td>构造更好训练数据</td><td>“多生成，留好的”</td></tr>
+</tbody></table></section>
+<footer>下一章：Inference / Serving 图解</footer>
+</div></main><script src="assets/site.js"></script></body></html>
