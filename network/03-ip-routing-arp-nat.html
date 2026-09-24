@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>03 · IP、Route、ARP/NDP、ICMP、NAT</title>
+<style>
+:root{--bg:#f5f8fc;--card:#fff;--ink:#102647;--muted:#63768e;--line:#d9e4f0;--blue:#2e67ef;--b:#eef4ff;--g:#edf9f2;--o:#fff4e8;--p:#f4efff;--dark:#111a2f}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#eef5fb,#fff);font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--ink)}main{max-width:1180px;margin:auto;padding:30px 22px 80px}
+.hero{background:#fff;border:1px solid var(--line);border-radius:28px;padding:32px;box-shadow:0 16px 48px rgba(35,66,110,.08)}
+h1{font-size:40px;margin:0 0 10px}h2{font-size:28px;margin:42px 0 16px}h3{font-size:18px;margin:0 0 10px}.sub{font-size:18px;line-height:1.75;color:var(--muted)}
+.note{background:var(--dark);color:#fff;padding:15px 17px;border-radius:15px;line-height:1.65;margin-top:18px}.nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.nav a{color:#225dce;text-decoration:none;border:1px solid #c7d7e8;padding:9px 12px;border-radius:11px;background:#fff;font-weight:600}
+.grid2,.grid3,.grid4{display:grid;gap:14px}.grid2{grid-template-columns:repeat(2,1fr)}.grid3{grid-template-columns:repeat(3,1fr)}.grid4{grid-template-columns:repeat(4,1fr)}
+.card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:18px}.card p{color:var(--muted);line-height:1.65;margin:6px 0 0}.tag{display:inline-block;font-size:12px;padding:4px 8px;border-radius:999px;background:#eaf2ff;color:#245bcc;margin-bottom:8px}
+.flow{display:flex;flex-direction:column;align-items:center;gap:8px}.step{width:min(760px,100%);padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:#fff;text-align:center;font-weight:700}.blue{background:var(--b)}.green{background:var(--g)}.orange{background:var(--o)}.purple{background:var(--p)}.arrow{color:var(--blue);font-weight:900}
+.packet{background:#0f182d;color:#dbe6ff;border-radius:18px;padding:20px;font-family:Consolas,monospace;white-space:pre-wrap;line-height:1.7;overflow:auto}
+.table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden}.table th,.table td{padding:12px;border-bottom:1px solid var(--line);text-align:left}.table th{background:#f3f7fc}
+footer{text-align:center;color:var(--muted);font-size:13px;margin-top:40px}
+@media(max-width:900px){.grid2,.grid3,.grid4{grid-template-columns:1fr}h1{font-size:31px}}
+</style>
+</head>
+<body><main>
+<section class="hero">
+<span class="tag">Phase 3</span>
+<h1>IP、CIDR、Route、ARP/NDP、ICMP、NAT</h1>
+<p class="sub">这一章把“目标 IP 已经知道”之后的世界讲透：如何判断同网段、如何选下一跳、为什么先 Route 再 ARP/NDP、路由器如何逐跳转发，以及 NAT/PAT 为什么必须放在路由器边界里。</p>
+<div class="note"><b>一句话母线：</b>IP 负责最终目标，Route 负责下一跳，ARP/NDP 负责当前链路邻居，Router 逐跳转发，NAT/PAT 可能在边界上改写地址与端口。</div>
+<div class="nav"><a href="./README.md">总目录</a><a href="./03-ip-routing-arp-nat.md">完整 Markdown</a><a href="./02-network-model-and-packets.html">上一章 HTML</a><a href="./PLAN.md">计划</a></div>
+</section>
+
+<h2>1 · CIDR：为什么 192.168.1.20/24 属于 192.168.1.0/24？</h2>
+<div class="grid3">
+<div class="card"><span class="tag">IP</span><h3>192.168.1.20</h3><p>32 位 IPv4 地址，人类用点分十进制阅读。</p></div>
+<div class="card"><span class="tag">Prefix</span><h3>/24</h3><p>前 24 位属于网络前缀，剩余 8 位属于主机/interface 部分。</p></div>
+<div class="card"><span class="tag">Network</span><h3>192.168.1.0/24</h3><p>IP 与 /24 mask 做 AND 后得到网络前缀。</p></div>
+</div>
+
+<h2>2 · Route 先回答“下一跳是谁”</h2>
+<div class="grid2">
+<div class="card"><span class="tag">同网段</span><h3>192.168.1.20 → 192.168.1.50</h3><p>Route 判断目标在本地直连网络，next hop 就是 192.168.1.50 自己，然后 ARP 目标主机。</p></div>
+<div class="card"><span class="tag">异网段</span><h3>192.168.1.20 → 203.0.113.20</h3><p>找不到更具体直连路由，使用 default route，next hop = 192.168.1.1，再 ARP 网关。</p></div>
+</div>
+
+<h2>3 · 最长前缀匹配</h2>
+<table class="table">
+<tr><th>Route</th><th>目标 10.1.2.99 是否匹配</th><th>结果</th></tr>
+<tr><td>10.0.0.0/8</td><td>是</td><td>候选</td></tr>
+<tr><td>10.1.0.0/16</td><td>是</td><td>候选</td></tr>
+<tr><td>10.1.2.0/24</td><td>是</td><td><b>最终选择</b></td></tr>
+<tr><td>0.0.0.0/0</td><td>是</td><td>兜底</td></tr>
+</table>
+
+<h2>4 · Route → ARP，而不是“ARP 永远找网关”</h2>
+<div class="flow">
+<div class="step blue">dst IP = 203.0.113.20</div><div class="arrow">↓</div>
+<div class="step blue">Route Lookup</div><div class="arrow">↓</div>
+<div class="step orange">next hop = 192.168.1.1</div><div class="arrow">↓</div>
+<div class="step orange">ARP / Neighbor Cache</div><div class="arrow">↓</div>
+<div class="step green">192.168.1.1 → Router MAC</div><div class="arrow">↓</div>
+<div class="step green">构造当前链路 L2 Frame</div>
+</div>
+
+<h2>5 · 为什么 dst MAC 和 dst IP 可以不是同一个设备？</h2>
+<div class="packet">Ethernet:
+src MAC = Laptop MAC
+dst MAC = Router MAC
+
+IP:
+src IP = 192.168.1.20
+dst IP = 203.0.113.20
+
+解释：
+MAC 只负责当前一跳；
+IP 指向最终目标。</div>
+
+<h2>6 · Router 每一跳到底做什么？</h2>
+<div class="grid4">
+<div class="card"><b>1. 收到当前链路 Frame</b><p>检查并处理当前 L2 封装。</p></div>
+<div class="card"><b>2. 看 IP dst</b><p>真正的远端目标仍然写在 IP Header 里。</p></div>
+<div class="card"><b>3. 查 FIB</b><p>根据最长前缀匹配选下一跳和出接口。</p></div>
+<div class="card"><b>4. 重建下一跳 L2</b><p>MAC/L2 Header 随链路变化，再继续转发。</p></div>
+</div>
+
+<h2>7 · Control Plane 与 Data Plane</h2>
+<div class="grid2">
+<div class="card"><span class="tag">Control Plane</span><h3>形成“地图”</h3><p>BGP、OSPF、IS-IS、静态路由等帮助设备学习“哪些前缀从哪里可达”。</p></div>
+<div class="card"><span class="tag">Data Plane</span><h3>真正“开车”</h3><p>每个包到来时高速查 FIB/forwarding table，决定下一跳并转发。</p></div>
+</div>
+
+<h2>8 · IPv4 ARP 与 IPv6 NDP</h2>
+<div class="grid2">
+<div class="card"><span class="tag">IPv4</span><h3>ARP</h3><p>ARP Request 常见广播，ARP Reply 常见单播。OS 会维护邻居缓存，不需要每包都广播。</p></div>
+<div class="card"><span class="tag">IPv6</span><h3>NDP</h3><p>Neighbor Solicitation / Advertisement 基于 ICMPv6，并使用 multicast 等机制，不使用 ARP。</p></div>
+</div>
+
+<h2>9 · ICMP、ping、traceroute</h2>
+<div class="grid3">
+<div class="card"><b>ICMP</b><p>承担网络层差错/控制/诊断信息，例如 Time Exceeded、Echo 等。</p></div>
+<div class="card"><b>ping</b><p>经典 IPv4 使用 Echo Request / Echo Reply。ping 不通不能直接推出 TCP/HTTPS 不通。</p></div>
+<div class="card"><b>traceroute</b><p>逐步增加 TTL/Hop Limit，利用中间路由器返回 Time Exceeded 来推断路径节点。</p></div>
+</div>
+
+<h2>10 · NAT/PAT 的正确位置</h2>
+<div class="flow">
+<div class="step blue">Laptop 已产生 TCP/IP packet</div><div class="arrow">↓</div>
+<div class="step blue">Route + ARP → 发到 Home Router</div><div class="arrow">↓</div>
+<div class="step orange">Router: conntrack / NAT policy</div><div class="arrow">↓</div>
+<div class="step orange">192.168.1.20:53124 ↔ 198.51.100.8:62001</div><div class="arrow">↓</div>
+<div class="step purple">WAN / Internet forwarding</div>
+</div>
+
+<h2>11 · SNAT / DNAT / PAT</h2>
+<div class="grid3">
+<div class="card"><span class="tag">SNAT</span><h3>改 source</h3><p>常见于内网出公网：192.168.1.20 → 198.51.100.8。</p></div>
+<div class="card"><span class="tag">DNAT</span><h3>改 destination</h3><p>例如公网 8443 转发到内部 192.168.1.100:443。</p></div>
+<div class="card"><span class="tag">PAT/NAPT</span><h3>端口参与映射</h3><p>大量内部连接共享较少公网 IPv4 时，用地址+端口维护可区分映射。</p></div>
+</div>
+
+<h2>12 · 返回包为什么能回到原来的电脑？</h2>
+<div class="packet">Server reply:
+203.0.113.20:443
+        →
+198.51.100.8:62001
+
+Home Router:
+查 conntrack / NAT state
+        ↓
+reverse translation
+        ↓
+192.168.1.20:53124
+
+Laptop:
+TCP socket lookup
+        ↓
+Browser</div>
+
+<h2>13 · NAT ≠ Firewall</h2>
+<div class="grid2">
+<div class="card"><b>NAT</b><p>地址/端口改写与映射。</p></div>
+<div class="card"><b>Firewall</b><p>根据安全/策略规则允许、拒绝或处理流量。家庭路由器常把两者放在同一个盒子里，所以容易混淆。</p></div>
+</div>
+
+<h2>14 · CGNAT 与 IPv6</h2>
+<div class="grid2">
+<div class="card"><span class="tag">CGNAT</span><h3>家庭路由器外面可能还有一层 NAT</h3><p>你的 WAN 地址可能还是共享地址，运营商再把很多用户映射到公网 IPv4。</p></div>
+<div class="card"><span class="tag">IPv6</span><h3>通常不依赖 NAPT 解决地址不足</h3><p>但仍然需要 routing 和 firewall；“没有 NAT”不等于“没有安全边界”。</p></div>
+</div>
+
+<h2>15 · 记忆模型</h2>
+<div class="card"><p><b>IP：</b>最终目标是谁。<br><b>Route：</b>下一跳走谁。<br><b>ARP/NDP：</b>当前链路怎么找到下一跳。<br><b>Router：</b>逐跳查 FIB 并继续转发。<br><b>NAT/PAT：</b>某些边界上改写地址/端口，并保存状态让返回流量能反向映射。</p></div>
+
+<footer>完整实验、自测与细节见 03-ip-routing-arp-nat.md</footer>
+</main></body></html>
