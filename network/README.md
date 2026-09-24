@@ -128,8 +128,8 @@ IP
 4. [TCP / UDP：可靠传输与状态机](./04-tcp-udp.md) · [HTML 视觉版](./04-tcp-udp.html)  
    四元组、监听/连接 Socket、三次握手、Seq/Ack、重传、rwnd/cwnd、四次挥手、TIME_WAIT/CLOSE_WAIT、Keepalive、RST、故障场景。
 
-5. 05-http-https-tls.md  
-   HTTP、TLS 1.2/1.3、ECDHE、数字签名、证书链、SNI、ALPN。
+5. [HTTP / HTTPS / TLS：业务语义、证书与安全握手](./05-http-https-tls.md) · [HTML 视觉版](./05-http-https-tls.html)  
+   HTTP Request/Response、Host/:authority、Cookie/Session、缓存、TLS 1.2/1.3、ECDHE、HKDF、数字签名、证书链、SNI、ALPN、Session Resumption、0-RTT。
 
 6. 06-modern-protocols.md  
    HTTP/2、HTTP/3、QUIC、WebSocket、RPC。
