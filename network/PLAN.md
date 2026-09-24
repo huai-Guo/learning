@@ -204,6 +204,22 @@ Route
 
 # 6. Phase 4｜TCP / UDP
 
+状态：**第一版已完成并落库**
+
+- [x] Markdown 正文：04-tcp-udp.md
+- [x] HTML 视觉版：04-tcp-udp.html
+- [x] fd / socket / port / TCP connection 边界
+- [x] LISTEN socket / connected socket / accept queue
+- [x] listen 但不 accept、无 listener、firewall drop 对比
+- [x] 三次握手 / ISN / Seq / Ack / TCP options
+- [x] TCP byte stream 与 UDP datagram
+- [x] RTO / Fast Retransmit / SACK
+- [x] Sliding Window / rwnd / Zero Window / Flow Control
+- [x] cwnd / Congestion Control / Slow Start 入门
+- [x] FIN / CLOSE_WAIT / TIME_WAIT / RST
+- [x] Keepalive / 拔网线 / 进程崩溃 / 整机断电
+- [x] Windows / Linux / Wireshark 实验
+
 文件：04-tcp-udp.md
 
 主线：
