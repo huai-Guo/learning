@@ -8,33 +8,65 @@
 
 # 0. 总图：先看职责，不要先数机器
 
+不要把生产网络理解成一条固定流水线：
+
 ~~~text
-Browser
-   ↓
-DNS
-   ↓
-CDN / Edge
-   ↓
+CDN
+ ↓
 WAF
+ ↓
+LB
+ ↓
+TLS
+ ↓
+Gateway
+~~~
+
+这会误导，因为 **TLS Termination 是某个节点的能力，不是一台独立设备；CDN / WAF / LB / Gateway 的职责也可能部署在同一个 Edge 或 Proxy 上。**
+
+更准确的职责图：
+
+~~~text
+Client
+   ↓ Internet
+Public Edge / Entry
+   ├─ CDN Cache
+   ├─ DDoS / WAF
+   ├─ L4 / L7 Load Balancing
+   ├─ TLS Termination 或 Passthrough
+   └─ HTTP Routing
    ↓
-L4 / L7 Load Balancer
+Gateway / Proxy Layer
+   ├─ Nginx / Envoy
+   ├─ Auth / Rate Limit
+   ├─ Routing
+   └─ Protocol Translation
    ↓
-TLS Termination
-   ↓
-Nginx / Envoy / API Gateway
-   ↓
-Backend Service
-   ↓
-Service Discovery + Load Balancing
-   ↓
-RPC
+Application Network
+   ├─ Service Discovery
+   ├─ Load Balancing
+   ├─ RPC
+   └─ mTLS
    ↓
 Redis / MySQL / MQ
 ~~~
 
 现实系统不一定把这些职责部署成很多独立机器。一个 Edge 进程就可能同时承担 TLS、WAF、Cache、HTTP Routing 与 Origin Proxy。
 
-所以这首先是一张职责图，不是设备数量图。
+典型 TLS 部署至少有三种：
+
+~~~text
+A. Edge Termination
+Client → TLS → Edge → HTTP/TLS → Backend
+
+B. L4 Passthrough
+Client → TLS → L4 LB → TLS Endpoint
+
+C. Re-encrypt
+Client → TLS A → Edge/Gateway → TLS B → Backend
+~~~
+
+所以这首先是一张职责图，不是设备数量图，也不是唯一固定顺序。
 
 
 ---
@@ -1133,23 +1165,36 @@ Ping 成功不代表 TCP 443 开放、UDP 443 开放、TLS 正常、HTTP 正常�
 
 ---
 
-# 44. 下一章
+# 44. 全课程回到母图
 
-下一章进入实验：
-
-> **08｜Windows / Linux / curl / OpenSSL / Wireshark / DevTools：把前面所有概念在真实机器上验证出来。**
-
-每个实验统一回答：
+到这里，00～07 的主线闭环已经完成：
 
 ~~~text
-执行什么？
+Network Bootstrap
  ↓
-看哪一列？
+URL / DNS
  ↓
-它对应母图里的哪一步？
+Socket / TCP / UDP
  ↓
-异常时说明什么？
+IP / Route / ARP-NDP / NAT
+ ↓
+TLS / HTTP
+ ↓
+HTTP/2 / QUIC / HTTP/3 / WebSocket / RPC
+ ↓
+CDN / WAF / LB / Gateway
+ ↓
+Service Discovery / RPC
+ ↓
+Redis / MySQL
 ~~~
+
+接下来不再新增第 08 章，而是继续把现有 00～07 的 HTML 视觉版打磨到：
+
+- 不依赖 Markdown 也能完整阅读；
+- 时序图在桌面和手机上都不破坏因果顺序；
+- 复杂概念优先使用职责图 / 时序图 / 对比图，而不是堆文字；
+- 所有容易混淆的层次都明确拆开。
 
 ---
 
