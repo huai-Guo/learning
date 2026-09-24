@@ -435,3 +435,233 @@ Internal RPC
 ~~~
 
 所以一个用户 HTTP Request 可以在内部变成 RPC。
+
+
+---
+
+# 17. Service Discovery 与 Load Balancing
+
+代码只知道：
+
+~~~text
+inventory-service
+~~~
+
+真实网络需要：
+
+~~~text
+10.20.1.7:9000
+10.20.1.8:9000
+10.20.2.3:9000
+~~~
+
+因此：
+
+~~~text
+Service Name
+ ↓
+Service Discovery
+ ↓
+Endpoint Set
+ ↓
+Load Balancing
+ ↓
+Pick One Endpoint
+ ↓
+Connect or Reuse
+ ↓
+RPC
+~~~
+
+一句话：
+
+~~~text
+Discovery
+= 有哪些实例？
+
+Load Balancing
+= 这一次选哪个？
+~~~
+
+---
+
+# 18. Client-side、Server-side、Sidecar LB
+
+Client-side：
+
+~~~text
+Service A
+ ↓ Discovery
+A / B / C
+ ↓
+自己选 B
+ ↓
+RPC → B
+~~~
+
+Server-side：
+
+~~~text
+Service A
+ ↓
+Stable VIP / Proxy
+ ↓
+A / B / C
+~~~
+
+Sidecar：
+
+~~~text
+Service A
+ ↓ localhost
+Sidecar
+ ↓ Discovery + LB + mTLS
+ ↓
+Remote Sidecar
+ ↓
+Service B
+~~~
+
+---
+
+# 19. 为什么需要 Connection Pool？
+
+如果每次调用都：
+
+~~~text
+socket
+connect
+TLS
+request
+close
+~~~
+
+成本很高。
+
+因此会维护长期连接：
+
+~~~text
+Service A
+  ├─ Conn A → Service B1
+  ├─ Conn B → Service B2
+  └─ Conn C → Service B3
+~~~
+
+HTTP/2 / gRPC 中，一条 Connection 还可以复用多个 Streams。
+
+---
+
+# 20. Keepalive、Idle Timeout、Max Age、Drain
+
+~~~text
+Keepalive
+→ 探测连接是否仍可用
+
+Idle Timeout
+→ 太久无流量就释放
+
+Max Connection Age
+→ 连接不能永久存在
+
+Drain
+→ 不再接新请求，让旧请求完成后关闭
+~~~
+
+所以 Connection closed by peer 不一定是网络故障，也可能只是 Proxy 的连接生命周期策略。
+
+---
+
+# 21. Timeout 有很多层
+
+~~~text
+Browser Timeout
+CDN Timeout
+LB Timeout
+Gateway Timeout
+RPC Deadline
+Service Timeout
+Redis Timeout
+DB Query Timeout
+~~~
+
+它们不是同一个 Timeout。
+
+常见预算思想：
+
+~~~text
+User Budget 1000ms
+ ↓
+Gateway 900ms
+ ↓
+Service A 700ms
+ ↓
+Service B 500ms
+ ↓
+DB 300ms
+~~~
+
+下层先失败，上层才还有时间做 fallback、cleanup 或返回错误。
+
+---
+
+# 22. Retry 为什么可能制造事故？
+
+服务已经过载：
+
+~~~text
+Normal 1000 QPS
+ ↓
+Timeout 增多
+ ↓
+每层都 Retry
+ ↓
+额外流量继续放大
+ ↓
+更慢
+~~~
+
+这就是 Retry Storm。
+
+Retry 必须和 Backoff、Jitter、Retry Budget、Idempotency、Circuit Breaker、Load Shedding 一起考虑。
+
+---
+
+# 23. Circuit Breaker 与 Load Shedding
+
+Circuit Breaker：
+
+~~~text
+持续失败
+ ↓
+OPEN
+ ↓
+暂时不真实调用
+ ↓
+快速失败 / fallback
+ ↓
+HALF-OPEN
+ ↓
+试探恢复
+~~~
+
+Load Shedding 是系统超过容量时主动拒绝一部分请求，保护剩余请求。
+
+---
+
+# 24. Redis / MySQL 为什么通常在私网？
+
+数据库通常只允许 Private Network 和 Trusted Services 访问。
+
+原因包括 Attack Surface、Credential Exposure、Internet Scanning、DDoS、Misconfiguration、Access Control 和 Compliance。
+
+真实拓扑通常是：
+
+~~~text
+Internet
+ ↓
+Gateway
+ ↓
+Backend
+ ↓ Private Network
+Redis / MySQL
+~~~
