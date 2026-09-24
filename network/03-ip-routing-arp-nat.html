@@ -55,7 +55,7 @@
       <div class="grid-2">
         <div class="grid-card">
           <span class="tag blue">IPv4</span>
-          <div class="codebox">192.168.1.20
+          <div class="diagram">192.168.1.20
 = 32 bit address
 
 /24
@@ -65,7 +65,7 @@
         </div>
         <div class="grid-card">
           <span class="tag green">CIDR</span>
-          <div class="codebox">/24 → 2^(32-24) = 256 addresses
+          <div class="diagram">/24 → 2^(32-24) = 256 addresses
 /25 → 128
 /26 → 64
 /30 → 4</div>
@@ -80,7 +80,7 @@
       <div class="grid-2">
         <div class="grid-card">
           <span class="tag green">同网段</span>
-          <div class="codebox">本机：192.168.1.20/24
+          <div class="diagram">本机：192.168.1.20/24
 目标：192.168.1.50
 
 Route 判断：
@@ -92,7 +92,7 @@ Route 判断：
         </div>
         <div class="grid-card">
           <span class="tag orange">异网段</span>
-          <div class="codebox">本机：192.168.1.20/24
+          <div class="diagram">本机：192.168.1.20/24
 目标：203.0.113.20
 
 目标不在直连网段
@@ -108,7 +108,7 @@ next hop = 192.168.1.1</div>
     <section class="section" id="route">
       <span class="eyebrow">Route 决策</span>
       <h2>3. Route Table：目标 IP 到底应该从哪里发？</h2>
-      <div class="codebox">Destination        Next Hop         Interface
+      <div class="diagram">Destination        Next Hop         Interface
 192.168.1.0/24     direct           Wi-Fi
 10.0.0.0/8         192.168.1.254    Wi-Fi
 0.0.0.0/0          192.168.1.1      Wi-Fi</div>
@@ -132,7 +132,7 @@ next hop = 192.168.1.1</div>
         <div class="grid-card">
           <span class="tag blue">Data Plane</span>
           <h3>一个真实 Packet 到来时怎么办？</h3>
-          <div class="codebox">Read dst IP
+          <div class="diagram">Read dst IP
  ↓
 Lookup FIB
  ↓
@@ -153,7 +153,7 @@ Forward packet</div>
       <div class="grid-3">
         <div class="grid-card">
           <span class="tag orange">ARP</span>
-          <div class="codebox">“谁是 192.168.1.1？”
+          <div class="diagram">“谁是 192.168.1.1？”
 
 192.168.1.1
 → AA:BB:CC:DD:EE:FF</div>
@@ -168,7 +168,7 @@ Forward packet</div>
           <p>Switch 根据 MAC Table 决定 Frame 往哪个端口发；Router 根据 Route/FIB 决定 IP Packet 下一跳。两者不是同一个表。</p>
         </div>
       </div>
-      <div class="codebox" style="margin-top:14px">第一跳 Frame：
+      <div class="diagram" style="margin-top:14px">第一跳 Frame：
 src MAC = Laptop MAC
 dst MAC = Router LAN MAC
 
@@ -196,7 +196,7 @@ IP 目标通常仍然是最终 Server
     <section class="section" id="nat">
       <span class="eyebrow">边界地址转换</span>
       <h2>7. NAT / PAT：边界设备如何让私网连接共享公网 IPv4？</h2>
-      <div class="codebox">Inside:
+      <div class="diagram">Inside:
 192.168.1.20:53124
         →
 203.0.113.20:443
@@ -231,7 +231,7 @@ Outside:
 
     <section class="summary" id="summary">
       <h2>9. 一页总结：一个 IPv4 Packet 的出站与返回</h2>
-      <div class="codebox">【出站】
+      <div class="diagram">【出站】
 Application / TCP
  ↓
 IP Packet
@@ -286,6 +286,7 @@ Client Kernel / Socket</div>
           </div>
         </div>
       </div>
+      <div class="chapter-nav"><a href="./02-network-model-and-packets.html">← 02 · OS 收发包</a><a href="./04-tcp-udp.html">04 · TCP / UDP →</a></div>
     </section>
   </main>
 </div>
