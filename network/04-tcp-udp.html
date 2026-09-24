@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>04 · TCP / UDP</title>
+<style>
+:root{--bg:#f5f8fc;--card:#fff;--ink:#102647;--muted:#60728c;--line:#d9e4f0;--blue:#2d66ef;--b:#eef4ff;--g:#edf9f2;--o:#fff4e8;--p:#f4efff;--r:#fff0f0;--dark:#10182d}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#eef5fb,#fff);font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--ink)}main{max-width:1180px;margin:auto;padding:30px 22px 80px}
+.hero{background:#fff;border:1px solid var(--line);border-radius:28px;padding:32px;box-shadow:0 16px 48px rgba(35,66,110,.08)}
+h1{font-size:40px;margin:0 0 10px}h2{font-size:28px;margin:42px 0 16px}h3{font-size:18px;margin:0 0 10px}.sub{font-size:18px;line-height:1.75;color:var(--muted)}
+.note{margin-top:18px;background:var(--dark);color:#fff;padding:15px 17px;border-radius:15px;line-height:1.65}.nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.nav a{color:#225dce;text-decoration:none;border:1px solid #c7d7e8;padding:9px 12px;border-radius:11px;background:#fff;font-weight:600}
+.grid2,.grid3,.grid4{display:grid;gap:14px}.grid2{grid-template-columns:repeat(2,1fr)}.grid3{grid-template-columns:repeat(3,1fr)}.grid4{grid-template-columns:repeat(4,1fr)}
+.card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:18px}.card p{color:var(--muted);line-height:1.65;margin:6px 0 0}.tag{display:inline-block;font-size:12px;padding:4px 8px;border-radius:999px;background:#eaf2ff;color:#245bcc;margin-bottom:8px}
+.flow{display:flex;flex-direction:column;align-items:center;gap:8px}.step{width:min(760px,100%);padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:#fff;text-align:center;font-weight:700}.blue{background:var(--b)}.green{background:var(--g)}.orange{background:var(--o)}.purple{background:var(--p)}.red{background:var(--r)}.arrow{color:var(--blue);font-weight:900}
+.packet{background:#0f182d;color:#dbe6ff;border-radius:18px;padding:20px;font-family:Consolas,monospace;white-space:pre-wrap;line-height:1.7;overflow:auto}
+.table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden}.table th,.table td{padding:12px;border-bottom:1px solid var(--line);text-align:left}.table th{background:#f3f7fc}
+.states{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.state{border:1px solid var(--line);border-radius:14px;padding:12px;text-align:center;background:#fff;font-size:13px}.state strong{display:block;margin-bottom:4px}
+footer{text-align:center;color:var(--muted);font-size:13px;margin-top:40px}
+@media(max-width:900px){.grid2,.grid3,.grid4,.states{grid-template-columns:1fr}h1{font-size:31px}}
+</style>
+</head>
+<body><main>
+<section class="hero">
+<span class="tag">Phase 4</span>
+<h1>TCP / UDP · 可靠传输与状态机</h1>
+<p class="sub">这一章不只背“三次握手、四次挥手”。它从 Socket、四元组、Seq/Ack、重传、流量控制、拥塞控制一路讲到 TIME_WAIT、CLOSE_WAIT、Keepalive、RST 和真实故障场景。</p>
+<div class="note"><b>一句话：</b>TCP 用状态、序列号、ACK、重传、rwnd 和 cwnd，把不可靠 IP 上的 Segment 组织成应用可用的有序字节流；UDP 则提供轻量 Datagram，把更复杂的可靠性留给上层。</div>
+<div class="nav"><a href="./README.md">总目录</a><a href="./04-tcp-udp.md">完整 Markdown</a><a href="./03-ip-routing-arp-nat.html">上一章</a><a href="./PLAN.md">计划</a></div>
+</section>
+
+<h2>1 · 一个 443 为什么能有很多连接？</h2>
+<div class="packet">LISTEN 203.0.113.20:443
+├─ 10.0.0.10:50001 ↔ 203.0.113.20:443
+├─ 10.0.0.11:50001 ↔ 203.0.113.20:443
+└─ 10.0.0.10:50002 ↔ 203.0.113.20:443
+
+连接常用四元组：
+src IP + src port + dst IP + dst port</div>
+
+<h2>2 · Server Socket 生命周期</h2>
+<div class="flow">
+<div class="step blue">socket()</div><div class="arrow">↓</div>
+<div class="step blue">bind(IP, port)</div><div class="arrow">↓</div>
+<div class="step orange">listen() → LISTEN socket</div><div class="arrow">↓</div>
+<div class="step orange">TCP handshake completed → accept queue</div><div class="arrow">↓</div>
+<div class="step green">accept() → connected socket</div><div class="arrow">↓</div>
+<div class="step green">read()/write()</div>
+</div>
+
+<h2>3 · 三次握手真正建立什么？</h2>
+<div class="grid3">
+<div class="card"><b>交换 ISN</b><p>双方建立自己的序列空间，后续 Seq/Ack 才有共同基准。</p></div>
+<div class="card"><b>确认双向握手信息</b><p>Client 确认 Server SYN，Server 也确认 Client 的初始连接请求。</p></div>
+<div class="card"><b>初始化连接状态</b><p>协商 MSS、Window Scale、SACK 等 Options，并减少旧重复连接造成混乱。</p></div>
+</div>
+
+<h2>4 · 三次握手状态</h2>
+<div class="states">
+<div class="state"><strong>Server</strong>LISTEN</div>
+<div class="state"><strong>Client</strong>SYN-SENT</div>
+<div class="state"><strong>Server</strong>SYN-RECEIVED</div>
+<div class="state"><strong>Client</strong>ESTABLISHED</div>
+<div class="state"><strong>Server</strong>ESTABLISHED</div>
+<div class="state"><strong>App</strong>accept()</div>
+</div>
+
+<h2>5 · Seq / Ack：TCP 不是在给“包”编号</h2>
+<div class="grid2">
+<div class="card"><span class="tag">Sequence Number</span><h3>字节位置</h3><p>seq=1001,len=500 表示承载 byte 1001~1500。</p></div>
+<div class="card"><span class="tag">Acknowledgment</span><h3>下一期待字节</h3><p>ACK=2001 表示 2001 之前的连续字节已经确认，下一步期待 2001。</p></div>
+</div>
+
+<h2>6 · TCP 是 Byte Stream，UDP 是 Datagram</h2>
+<div class="grid2">
+<div class="card"><span class="tag">TCP</span><h3>没有应用消息边界</h3><p>send("HELLO") + send("WORLD")，对端可能一次 recv 到 HELLOWORLD，也可能拆成多次读取。应用协议自己做 framing。</p></div>
+<div class="card"><span class="tag">UDP</span><h3>保留 Datagram 边界</h3><p>应用发送两个 UDP Datagram，接收语义仍是两个 Datagram；但 UDP 本身不负责排序和重传。</p></div>
+</div>
+
+<h2>7 · 丢包恢复不是只有一种方式</h2>
+<div class="grid3">
+<div class="card"><b>RTO</b><p>根据 RTT 与波动估算等待时间，超时后重传。</p></div>
+<div class="card"><b>Fast Retransmit</b><p>经典模型借助重复 ACK 更快判断缺失数据，不必总等 RTO。</p></div>
+<div class="card"><b>SACK</b><p>告诉 Sender 哪些后续区间已经收到，让重传更精准。</p></div>
+</div>
+
+<h2>8 · rwnd 与 cwnd 不要混</h2>
+<div class="grid2">
+<div class="card"><span class="tag">Flow Control</span><h3>rwnd → 保护 Receiver</h3><p>接收缓冲快满时，Receiver 缩小 advertised window，避免 Sender 把接收端撑爆。</p></div>
+<div class="card"><span class="tag">Congestion Control</span><h3>cwnd → 保护 Network</h3><p>Sender 根据网络拥塞信号调节在途数据，实际发送量受 min(rwnd,cwnd) 等因素约束。</p></div>
+</div>
+
+<h2>9 · 四次挥手其实是“双方向分别关闭”</h2>
+<div class="packet">Active Closer                 Passive Closer
+
+FIN ----------------------------->
+        <--------------------- ACK
+        <--------------------- FIN
+ACK ----------------------------->
+
+Active:
+FIN-WAIT-1 → FIN-WAIT-2 → TIME-WAIT
+
+Passive:
+CLOSE-WAIT → LAST-ACK → CLOSED</div>
+
+<h2>10 · CLOSE_WAIT 与 TIME_WAIT 看谁的问题</h2>
+<div class="grid2">
+<div class="card red"><b>CLOSE_WAIT 很多</b><p>对端已经 FIN，本机应用却没有及时 close。优先检查异常路径、连接泄漏、线程卡住。</p></div>
+<div class="card orange"><b>TIME_WAIT 很多</b><p>往往说明本机是主动关闭方或短连接很多。先看连接复用、连接池和创建速率，不要无脑删除状态。</p></div>
+</div>
+
+<h2>11 · 没 listener、Firewall drop、listen 不 accept</h2>
+<table class="table">
+<tr><th>场景</th><th>典型现象</th><th>第一排查方向</th></tr>
+<tr><td>Port 没 listener</td><td>常见 RST / Connection refused</td><td>服务是否启动、端口是否监听</td></tr>
+<tr><td>Firewall 静默 drop SYN</td><td>SYN 重传、最终 timeout</td><td>ACL / Firewall / Network path</td></tr>
+<tr><td>listen 但不 accept</td><td>部分握手仍可完成，随后 accept queue 压力</td><td>应用 accept rate、backlog、队列溢出</td></tr>
+</table>
+
+<h2>12 · 为什么拔网线连接不会瞬间消失？</h2>
+<div class="flow">
+<div class="step blue">两端都认为 ESTABLISHED</div><div class="arrow">↓</div>
+<div class="step red">物理链路突然断开</div><div class="arrow">↓</div>
+<div class="step">对端并不会收到“网线断开”TCP 报文</div><div class="arrow">↓</div>
+<div class="step orange">等到发送重传失败 / Keepalive / App Heartbeat / OS 明确错误</div><div class="arrow">↓</div>
+<div class="step green">应用最终感知连接不可用</div>
+</div>
+
+<h2>13 · 三种“保活”不是一回事</h2>
+<div class="grid3">
+<div class="card"><b>TCP Keepalive</b><p>内核层探测长期空闲 TCP 连接是否仍可达。</p></div>
+<div class="card"><b>HTTP persistent connection</b><p>应用层在同一 TCP 连接上复用多个 HTTP 请求。</p></div>
+<div class="card"><b>Application Heartbeat</b><p>业务协议确认对端应用和会话是否真的健康，例如 WebSocket Ping/Pong。</p></div>
+</div>
+
+<h2>14 · TCP / UDP 对比</h2>
+<table class="table">
+<tr><th>维度</th><th>TCP</th><th>UDP</th></tr>
+<tr><td>数据抽象</td><td>Byte Stream</td><td>Datagram</td></tr>
+<tr><td>连接状态</td><td>有</td><td>无 TCP 式握手</td></tr>
+<tr><td>顺序/重传</td><td>内建</td><td>UDP 本身不提供</td></tr>
+<tr><td>Flow Control</td><td>有</td><td>无内建</td></tr>
+<tr><td>Congestion Control</td><td>有</td><td>UDP 本身无内建</td></tr>
+<tr><td>上层例子</td><td>HTTP/1.1、HTTP/2、SSH</td><td>DNS、QUIC、实时媒体等</td></tr>
+</table>
+
+<h2>15 · 记忆模型</h2>
+<div class="card"><p><b>连接建立：</b>ISN + Options + State。<br><b>可靠：</b>Seq/Ack + RTO/Fast Retransmit/SACK。<br><b>接收端保护：</b>rwnd。<br><b>网络保护：</b>cwnd。<br><b>关闭：</b>双向 FIN + TIME_WAIT。<br><b>故障：</b>RST、重传超时、Keepalive、应用 Heartbeat。</p></div>
+
+<footer>完整正文、故障场景、实验与自测见 04-tcp-udp.md</footer>
+</main></body></html>
