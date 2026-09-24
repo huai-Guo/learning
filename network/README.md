@@ -13,7 +13,7 @@
 ## 先看阅读版
 
 - **GitHub 直接阅读：** 优先看 Markdown，本仓库的 Mermaid 图会直接渲染。
-- **视觉总览：** [index.html](./index.html) 是统一视觉课程首页；clone/download 后直接用浏览器打开，并与 [assets/course.css](./assets/course.css) 共享同一套样式。
+- **视觉课程：** [index.html](./index.html) 是统一课程首页；00～07 均提供视觉阅读版。HTML 目标是“可以独立学完”，Markdown 继续作为完整文字真源。
 - **完整计划：** [PLAN.md](./PLAN.md)
 
 > GitHub 文件页不会像 GitHub Pages 那样直接运行 HTML，所以仓库内以 Markdown 为“正文真源”，HTML 用作视觉总览。后续如果启用 GitHub Pages，可以直接把 HTML 作为在线阅读入口。
@@ -27,53 +27,39 @@
 
 ~~~mermaid
 flowchart LR
-    subgraph B["Browser / App"]
-      B1["URL 解析"]
-      B2["DNS / 地址候选"]
-      B3["地址排序 + Happy Eyeballs"]
-      B4["TLS"]
-      B5["HTTP"]
-    end
+    B["Browser / App<br/>URL · DNS · TLS · HTTP"]
+    K["Client OS Kernel<br/>Socket · TCP/UDP · IP · Route · Neighbor"]
+    N["NIC / Local Link"]
+    R["Home / Access Router<br/>Routing · Conntrack · NAT/PAT · Firewall"]
+    I["ISP / Internet<br/>逐跳 IP Forwarding"]
+    E["Public Edge / Origin Entry<br/>CDN · WAF · L4/L7 LB · TLS · HTTP Routing"]
+    A["Backend Network<br/>Gateway · Discovery · LB · RPC · mTLS"]
+    D["Data / Infra<br/>Redis · MySQL · MQ"]
 
-    subgraph K["本机 OS Kernel"]
-      K1["Socket / 临时端口"]
-      K2["TCP"]
-      K3["IP + Route"]
-      K4["ARP (IPv4) / NDP (IPv6)"]
-      K5["Driver / NIC"]
-    end
+    DNS["DNS System<br/>Recursive / Authoritative"]
+    CA["PKI / Trust<br/>CA · Certificate · Local Trust Store"]
 
-    subgraph R["家庭路由器"]
-      R1["L2 接收"]
-      R2["Routing / Conntrack"]
-      R3["NAT/PAT<br/>(典型 IPv4 家庭网)"]
-      R4["WAN 转发"]
-    end
-
-    subgraph I["Internet"]
-      I1["ISP"]
-      I2["AS / BGP 控制面"]
-      I3["逐跳转发"]
-    end
-
-    subgraph S["Server / Edge"]
-      S1["NIC / Kernel"]
-      S2["TCP 443 LISTEN"]
-      S3["Connected Socket"]
-      S4["TLS 证书 + 私钥"]
-      S5["HTTP Handler"]
-    end
-
-    B1 --> B2 --> B3
-    B3 --> K1 --> K2 --> K3 --> K4 --> K5
-    K5 --> R1 --> R2 --> R3 --> R4
-    R4 --> I1 --> I2 --> I3 --> S1 --> S2 --> S3
-    S3 --> B4 --> S4
-    B4 --> B5 --> S5
+    B --> K --> N --> R --> I --> E --> A --> D
+    B -. 名称解析 .-> DNS
+    B -. 证书验证 / TLS 身份 .-> CA
+    E -. 证书部署 / TLS endpoint .-> CA
 ~~~
 
-这张图是“角色地图”，不是逐报文时序图。  
-真正 TCP/TLS 的双向交互，会在章节里用 sequence diagram 画。
+这张图是“角色 / 拓扑地图”，不是逐报文时序图，也不是说每一项能力都必须部署成独立设备。
+
+尤其要避免一种错误理解：
+
+~~~text
+TLS 完成
+ ↓
+HTTP 完成
+ ↓
+然后才轮到 CDN / WAF / LB
+~~~
+
+现实中 CDN / Edge / Gateway 本身就是 TCP、TLS、HTTP 的参与者；一条业务请求经过代理边界时，还可能结束旧连接并重新建立下一段连接。
+
+真正 TCP/TLS 的双向交互，会在章节里用时序图单独画。
 
 ---
 
@@ -113,7 +99,7 @@ IP
 
 # 2. 学习顺序
 
-0. [电脑刚连上网络时，先拿到了什么？](./00-network-bootstrap.md)  
+0. [电脑刚连上网络时，先拿到了什么？](./00-network-bootstrap.md) · [HTML 视觉版](./00-network-bootstrap.html)  
    DHCP、本机 IP、子网、默认网关、DNS Server。
 
 1. [从输入 URL 到网页返回](./01-url-to-webpage.md) · [HTML 视觉版](./01-url-to-webpage.html)  
