@@ -104,23 +104,22 @@ scheme  hostname          port path      query       fragment</div>
         </div>
         <div class="grid-card">
           <span class="tag green">名称解析</span>
-          <div class="diagram">Browser
-  ↓
-本机 resolver / cache / hosts
-  ↓ miss
-Recursive Resolver
-  ↓
-Root
-  ↓
-TLD
-  ↓
-Authoritative DNS
-  ↓
-A / AAAA / CNAME ...</div>
-          <p>现实中缓存命中非常普遍，不是每次请求都完整走 Root → TLD → Authoritative。</p>
+          <div class="diagram">Browser / Network Stack Resolver
+  ├─ Browser cache（如果实现使用）
+  └─ System Resolver Policy
+       ├─ hosts / local sources
+       ├─ OS DNS cache
+       └─ configured recursive resolver
+                ↓ cache miss
+        Recursive Resolver
+                ↓
+        Root → TLD → Authoritative
+                ↓
+        A / AAAA / CNAME ...</div>
+          <p>Stub Resolver 可以理解为本机“轻量 DNS 客户端/查询入口”；真正替客户端继续查 Root、TLD、Authoritative 的通常是 Recursive Resolver。现实中缓存命中非常普遍。</p>
         </div>
       </div>
-      <div class="callout"><div class="icon">i</div><div><strong>hosts ≠ DNS Cache</strong><div>hosts 是静态本机映射；DNS Cache 是以前查询得到的 Resource Record 临时保存，两者来源和生命周期不同。</div></div></div>
+      <div class="callout"><div class="icon">i</div><div><strong>hosts ≠ DNS Cache</strong><div>hosts 是静态本机映射；DNS Cache 是以前查询得到的 Resource Record 临时保存，两者来源和生命周期不同。实际本地解析顺序还会受 OS、Browser、DoH 等实现与策略影响。</div></div></div>
     </section>
 
     <section class="section" id="happy">
@@ -321,6 +320,11 @@ Client Finished</div>
         </div>
       </div>
       <div class="callout"><div class="icon">!</div><div><strong>这两把“公钥”不是同一个东西</strong><div><b>ECDHE key_share ≠ Certificate identity public key</b>。前者解决“本次连接怎么协商密钥”，后者解决“你到底是谁”。</div></div></div>
+
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">SNI</span><p>ClientHello 中携带目标 hostname，帮助共享同一 IP:443 的 Server / Edge 选择正确站点配置与 Certificate。</p></div>
+        <div class="grid-card"><span class="tag green">ALPN</span><p>在 TLS 握手中协商应用协议，例如 <code>h2</code> 或 <code>http/1.1</code>；它和 SNI 解决的问题不同。</p></div>
+      </div>
 
       <div class="flow">
         <div class="step">Leaf / Server Certificate</div>
