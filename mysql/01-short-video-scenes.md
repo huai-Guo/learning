@@ -1,4 +1,295 @@
-# 01｜短视频场景：点赞、评论、发布与热点数据
+# 01｜短视频：从产品需求一步步设计数据库
+
+> 这一章现在不再从“点赞表怎么建”开始，而是先完整设计一个短视频业务数据库，再进入点赞、评论、发布、热点等具体问题。
+>
+> 贯穿原则：**先定义业务世界，再定义表。**
+
+---
+
+# A. 先确定数据库边界
+
+一个成熟短视频 App 不会只有一个巨大 mysql 数据库把所有业务揉在一起。
+
+可以先按所有权划分：
+
+~~~text
+Content DB
+├─ video
+├─ video_revision
+├─ video_asset
+├─ moderation_task
+├─ publish_job
+└─ video_tag
+
+Interaction DB
+├─ video_like
+├─ video_favorite
+├─ comment
+├─ comment_moderation
+└─ interaction_outbox
+
+Social DB
+└─ user_follow
+
+User DB
+└─ user_profile
+
+推荐 / 搜索 / 统计
+通常还有独立的数据系统
+~~~
+
+为什么这样划？
+
+因为视频内容生命周期、点赞评论关系生命周期、关注关系生命周期不同，它们的写入者、事务边界、容量、查询方向也不同。
+
+这里后续为了教学会把 DDL 放在一起展示，但要记住真实服务化系统首先考虑“谁拥有这份数据”。
+
+---
+
+# B. 先列完整业务链，不先建表
+
+~~~text
+创作者上传视频
+↓
+对象存储上传完成
+↓
+转码出 360p / 720p / 1080p
+↓
+保存草稿
+↓
+编辑标题、封面、tag
+↓
+提交机器审核
+↓
+可能进入人工审核
+↓
+审核通过
+↓
+立即/定时发布
+↓
+进入推荐系统
+↓
+用户刷到视频
+↓
+播放
+↓
+点赞 / 取消赞
+↓
+收藏 / 取消收藏
+↓
+评论 / 回复
+↓
+关注作者
+↓
+举报
+↓
+运营下架
+↓
+作者编辑新版本再发布
+~~~
+
+这已经说明：一个 video 表绝对不可能优雅地承担所有职责。
+
+---
+
+# C. 领域模型先画出来
+
+~~~mermaid
+erDiagram
+    USER ||--o{ VIDEO : creates
+    VIDEO ||--o{ VIDEO_REVISION : has
+    VIDEO ||--o{ VIDEO_ASSET : has
+    VIDEO_REVISION ||--o{ MODERATION_TASK : checked_by
+    VIDEO_REVISION ||--o{ VIDEO_TAG : tagged
+    VIDEO ||--o{ VIDEO_LIKE : receives
+    VIDEO ||--o{ VIDEO_FAVORITE : receives
+    VIDEO ||--o{ COMMENT : has
+    COMMENT ||--o{ COMMENT : replies
+    USER ||--o{ USER_FOLLOW : follows
+~~~
+
+最关键的不是 ER 图漂亮，而是开始区分身份、版本、资产、审核事实、发布任务、用户关系和评论树。
+
+---
+
+# D. 短视频核心表不是一张，而是一组协作表
+
+## 1. video：长期身份
+
+~~~sql
+CREATE TABLE video (
+    id                    BIGINT UNSIGNED NOT NULL,
+    creator_id            BIGINT UNSIGNED NOT NULL,
+    current_revision_id   BIGINT UNSIGNED NULL,
+    published_revision_id BIGINT UNSIGNED NULL,
+    lifecycle_status      TINYINT UNSIGNED NOT NULL,
+    created_at            DATETIME(3) NOT NULL,
+    updated_at            DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (id),
+    KEY idx_creator_status_created
+        (creator_id, lifecycle_status, created_at DESC, id DESC)
+) ENGINE=InnoDB;
+~~~
+
+## 2. video_revision：内容版本
+
+~~~sql
+CREATE TABLE video_revision (
+    id             BIGINT UNSIGNED NOT NULL,
+    video_id       BIGINT UNSIGNED NOT NULL,
+    version_no     INT UNSIGNED NOT NULL,
+    title          VARCHAR(256) NOT NULL,
+    description    VARCHAR(2000) NOT NULL,
+    cover_asset_id BIGINT UNSIGNED NULL,
+    review_status  TINYINT UNSIGNED NOT NULL,
+    content_hash   BINARY(32) NOT NULL,
+    created_by     BIGINT UNSIGNED NOT NULL,
+    created_at     DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_video_version (video_id, version_no),
+    KEY idx_video_version (video_id, version_no DESC),
+    KEY idx_review_queue (review_status, created_at, id)
+) ENGINE=InnoDB;
+~~~
+
+## 3. video_asset：资产与转码结果
+
+~~~sql
+CREATE TABLE video_asset (
+    id               BIGINT UNSIGNED NOT NULL,
+    video_id         BIGINT UNSIGNED NOT NULL,
+    revision_id      BIGINT UNSIGNED NULL,
+    asset_type       TINYINT UNSIGNED NOT NULL,
+    storage_key      VARCHAR(1024) NOT NULL,
+    width            INT UNSIGNED NULL,
+    height           INT UNSIGNED NULL,
+    bitrate          INT UNSIGNED NULL,
+    duration_ms      INT UNSIGNED NULL,
+    transcode_status TINYINT UNSIGNED NOT NULL,
+    created_at       DATETIME(3) NOT NULL,
+    updated_at       DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (id),
+    KEY idx_video_type (video_id, asset_type, id),
+    KEY idx_transcode_queue (transcode_status, created_at, id)
+) ENGINE=InnoDB;
+~~~
+
+大视频对象更适合对象存储；MySQL 保存业务身份、状态、元数据和 object key。
+
+## 4. moderation_task：审核不是 video 上一个字段
+
+~~~sql
+CREATE TABLE moderation_task (
+    id            BIGINT UNSIGNED NOT NULL,
+    revision_id   BIGINT UNSIGNED NOT NULL,
+    stage         TINYINT UNSIGNED NOT NULL,
+    reviewer_type TINYINT UNSIGNED NOT NULL,
+    status        TINYINT UNSIGNED NOT NULL,
+    result        TINYINT UNSIGNED NULL,
+    reason_code   VARCHAR(64) NULL,
+    detail_ref    VARCHAR(1024) NULL,
+    attempt_no    INT UNSIGNED NOT NULL,
+    created_at    DATETIME(3) NOT NULL,
+    finished_at   DATETIME(3) NULL,
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_revision_stage_attempt
+        (revision_id, stage, attempt_no),
+    KEY idx_queue
+        (status, stage, created_at, id),
+    KEY idx_revision
+        (revision_id, created_at, id)
+) ENGINE=InnoDB;
+~~~
+
+一个 revision 可能经历机器审核超时重试、人工复审、申诉复审。如果只在 video 上保存 review_status/reason，历史会全部丢失。
+
+## 5. publish_job：发布是一个可失败任务
+
+~~~sql
+CREATE TABLE publish_job (
+    id              BIGINT UNSIGNED NOT NULL,
+    video_id        BIGINT UNSIGNED NOT NULL,
+    revision_id     BIGINT UNSIGNED NOT NULL,
+    idempotency_key VARCHAR(128) NOT NULL,
+    publish_at      DATETIME(3) NOT NULL,
+    status          TINYINT UNSIGNED NOT NULL,
+    attempt_no      INT UNSIGNED NOT NULL,
+    lease_until     DATETIME(3) NULL,
+    last_error      VARCHAR(1024) NULL,
+    created_at      DATETIME(3) NOT NULL,
+    updated_at      DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_idempotency (idempotency_key),
+    KEY idx_dispatch (status, publish_at, lease_until, id)
+) ENGINE=InnoDB;
+~~~
+
+发布失败、重试、定时调度都不应该污染 video 的基础身份。
+
+---
+
+# E. 先做 Query Matrix，再谈索引
+
+| Query | 典型调用方 | 条件 | 排序 | 频率 |
+|---|---|---|---|---:|
+| 查视频身份 | Content Service | id | - | 极高 |
+| 批量取 20 个视频 | Feed Aggregator | id IN | - | 极高 |
+| 作者作品列表 | Creator Center | creator_id,status | created_at desc | 高 |
+| 某视频版本历史 | Creator Center | video_id | version_no desc | 中 |
+| 审核队列 | Moderation Worker | status,stage | created_at asc | 高 |
+| 转码队列 | Transcode Worker | status | created_at asc | 高 |
+| 待发布任务 | Publisher | status,publish_at | publish_at asc | 高 |
+| 用户最近点赞 | Profile | user_id,active | created_at desc | 高 |
+| 评论第一页 | Comment Service | video_id,status | created_at desc | 极高 |
+
+以后你看到任何一个索引，都应该能回指这张表里的一个 Query。
+
+---
+
+# F. 再做 Invariant Matrix
+
+| 规则 | 数据库表达 |
+|---|---|
+| 同一 video 的 version_no 唯一 | UNIQUE(video_id, version_no) |
+| 同一用户只能有一份 user-video 点赞关系 | UNIQUE(user_id, video_id) |
+| 同一 publish 请求重试不能生成多次逻辑发布 | UNIQUE(idempotency_key) |
+| 同一审核 stage 的 attempt 编号唯一 | UNIQUE(revision_id, stage, attempt_no) |
+| 发布只能从合法状态迁移 | 条件 UPDATE + 事务 |
+| 同一 upload part 不重复 | UNIQUE(upload_id, part_no) |
+
+这张表决定数据库到底替你兜住哪些错误。
+
+---
+
+# G. 再做 Mutation Matrix
+
+| 操作 | 主要表 | 是否单事务 | 远程副作用 |
+|---|---|---|---|
+| 创建草稿 | video + revision | 是 | 无 |
+| 提交审核 | revision + moderation_task + outbox | 是 | 审核服务异步 |
+| 审核完成 | moderation_task + revision | 是 | 无 |
+| 发布视频 | publish_job + video + outbox | 分阶段短事务 | CDN / 推荐 |
+| 点赞 | video_like + outbox | 是 | Redis / MQ 异步 |
+| 评论 | comment + outbox | 是 | 审核异步 |
+| 关注 | user_follow + outbox | 是 | 计数异步 |
+
+注意：一次产品操作不代表一个超长数据库事务。涉及远程系统时要拆成可恢复状态机。
+
+---
+
+# H. 接下来才进入点赞、评论、热点等具体场景
+
+下面保留原来的场景讲解，但现在请带着 Query Matrix、Invariant Matrix 和 Mutation Matrix 去看。
+
+索引、UNIQUE、FOR UPDATE、Outbox 都应该由设计一步步推出来，而不是突然出现的技术名词。
+
+---
+
 
 > 这一章不从“建一张 video 表”开始。
 >
@@ -1178,6 +1469,228 @@ event_id 去重
 
 这些问题会在：
 
-> [03｜从场景反推 InnoDB：索引、MVCC、锁与事务](./03-innodb-from-scenes.md)
+> [03｜MySQL 索引怎么设计](./03-index-design.md)
 
 里统一拆开。
+
+
+---
+
+# 27. 新场景：收藏和点赞为什么不一定共用一张 interaction 表
+
+很诱人的设计：
+
+~~~text
+user_video_interaction
+(user_id, video_id, liked, favorited, shared, ...)
+~~~
+
+看起来少建表，但要继续问：
+
+~~~text
+点赞和收藏生命周期相同吗？
+查询方向相同吗？
+数据保留策略相同吗？
+写 QPS 相同吗？
+以后收藏是否有 folder？
+取消点赞是否要保留历史？
+~~~
+
+如果收藏未来支持收藏夹、排序、备注，那么收藏会自然长成 favorite_folder + video_favorite，而点赞仍然只是 user-video relation。
+
+“字段看起来像”不代表应该放同一张表。
+
+---
+
+# 28. 新场景：收藏夹设计
+
+~~~sql
+CREATE TABLE favorite_folder (
+    id          BIGINT UNSIGNED NOT NULL,
+    user_id     BIGINT UNSIGNED NOT NULL,
+    name        VARCHAR(128) NOT NULL,
+    folder_type TINYINT UNSIGNED NOT NULL,
+    created_at  DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (id),
+    KEY idx_user_created (user_id, created_at, id)
+) ENGINE=InnoDB;
+
+CREATE TABLE video_favorite (
+    id         BIGINT UNSIGNED NOT NULL,
+    user_id    BIGINT UNSIGNED NOT NULL,
+    folder_id  BIGINT UNSIGNED NOT NULL,
+    video_id   BIGINT UNSIGNED NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_folder_video (folder_id, video_id),
+    KEY idx_user_video (user_id, video_id),
+    KEY idx_folder_created (folder_id, created_at DESC, id DESC)
+) ENGINE=InnoDB;
+~~~
+
+为什么 UNIQUE 是 folder_id + video_id，而不是 user_id + video_id？
+
+因为产品规则可能允许同一个视频出现在用户的多个不同收藏夹。
+
+业务规则改变，唯一键就改变。这正是“先定义不变量，再建表”。
+
+---
+
+# 29. 新场景：关注关系与明星热点
+
+~~~sql
+CREATE TABLE user_follow (
+    id          BIGINT UNSIGNED NOT NULL,
+    follower_id BIGINT UNSIGNED NOT NULL,
+    followee_id BIGINT UNSIGNED NOT NULL,
+    active      TINYINT UNSIGNED NOT NULL,
+    created_at  DATETIME(3) NOT NULL,
+    updated_at  DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_follow (follower_id, followee_id),
+    KEY idx_follower_created
+        (follower_id, active, created_at DESC, followee_id),
+    KEY idx_followee_created
+        (followee_id, active, created_at DESC, follower_id)
+) ENGINE=InnoDB;
+~~~
+
+维护两个方向的索引，是因为真实 Query 同时存在“我关注了谁”和“谁关注了我”。
+
+到了分库分表阶段，这两个方向甚至会产生 shard-key 冲突。
+
+大型系统可能按 follower_id 保存主关系，再异步构建 followee 方向 projection。
+
+---
+
+# 30. 新场景：举报系统为什么不能塞 comment.status
+
+用户可能举报视频、评论、用户、直播、私信；一个目标还可能被很多人举报。
+
+因此举报是独立事实：
+
+~~~text
+report
+├─ reporter_id
+├─ target_type
+├─ target_id
+├─ reason_code
+├─ evidence_ref
+├─ status
+└─ created_at
+~~~
+
+运营处置又是另一个生命周期：
+
+~~~text
+moderation_case
+~~~
+
+不要把用户举报、机器审核、内容最终状态压进同一个 status。
+
+---
+
+# 31. 新场景：计数到底放哪
+
+一个视频可能有：
+
+~~~text
+play_count
+like_count
+comment_count
+favorite_count
+share_count
+~~~
+
+如果全部放 video 主行并高频 UPDATE：
+
+~~~text
+同一个爆款 video.id
+↓
+成为超级热点行
+~~~
+
+更合理要区分：
+
+~~~text
+关系事实
+video_like / comment / favorite
+
+实时展示
+Redis / counter service
+
+长期聚合
+video_stat_snapshot / OLAP / projector
+~~~
+
+video 表可以有低频快照，但不应该把所有高频事实压在身份主行上。
+
+---
+
+# 32. 新场景：播放历史与曝光日志为什么是另一类数据
+
+用户刷视频会产生曝光、开始播放、播放 3 秒、播放 80%、完播、跳过、重播等事件。
+
+如果每个事件都同步写 OLTP MySQL 主库：
+
+~~~text
+Feed QPS
+× 每个视频多个行为事件
+↓
+极高写放大
+~~~
+
+这类行为日志往往走：
+
+~~~text
+客户端/服务端事件
+↓
+日志或消息系统
+↓
+流处理
+↓
+OLAP / Feature Store
+~~~
+
+只有真正需要 OLTP 语义的“最近观看历史”等状态，才可能单独落 MySQL。
+
+---
+
+# 33. 一个更完整的短视频数据库地图
+
+~~~mermaid
+flowchart TB
+    subgraph Content["Content DB"]
+      V["video"]
+      VR["video_revision"]
+      VA["video_asset"]
+      MT["moderation_task"]
+      PJ["publish_job"]
+    end
+
+    subgraph Interaction["Interaction DB"]
+      L["video_like"]
+      F["video_favorite"]
+      C["comment"]
+      R["report"]
+    end
+
+    subgraph Social["Social DB"]
+      UF["user_follow"]
+    end
+
+    Content --> O["Outbox / Binlog"]
+    Interaction --> O
+    Social --> O
+
+    O --> MQ["MQ / CDC"]
+    MQ --> Redis["Redis"]
+    MQ --> Search["Search"]
+    MQ --> Reco["Recommendation"]
+    MQ --> OLAP["Warehouse / OLAP"]
+~~~
+
+学 MySQL 的关键不是把整张图都塞进 MySQL，而是知道哪些数据是 OLTP 核心事实，哪些数据应该成为异步读模型。

@@ -1,4 +1,290 @@
-# 02｜Agent 场景：Session、Run、Tool Call、Resume 与配额
+# 02｜Agent：从产品需求一步步设计数据库
+
+> Agent 数据库真正难的不是“把聊天消息存下来”，而是：
+>
+> **如何把一个长时间、可失败、可重试、有外部副作用、可恢复的执行过程建模成稳定的持久化状态。**
+
+---
+
+# A. 先确定 Agent 平台的数据库边界
+
+假设我们不是做一个本地 Demo，而是做企业级 Agent SaaS。
+
+业务可能包含：
+
+~~~text
+用户创建 Agent
+Agent 有多个版本
+多人共享 Agent
+创建 Session
+用户发起 Turn
+Turn 可以 Retry
+Run 可以 Crash Resume
+模型会多次调用 Tool
+高风险 Tool 需要人工审批
+Worker 可以水平扩容
+Run 可以被取消
+用户有并发配额
+租户有月度 Token 配额
+需要精确计费
+管理员需要审计
+历史大结果要归档
+~~~
+
+可以先划分：
+
+~~~text
+Agent Definition Domain
+├─ agent_definition
+├─ agent_version
+└─ agent_permission
+
+Conversation Domain
+├─ session
+├─ session_member
+├─ turn
+└─ message
+
+Execution Domain
+├─ run
+├─ run_step
+├─ tool_call
+├─ tool_approval
+├─ checkpoint
+└─ task
+
+Billing / Quota Domain
+├─ agent_quota
+├─ concurrency_quota
+├─ quota_period
+├─ usage_ledger
+└─ usage_projection
+
+Audit / Integration
+├─ audit_event
+└─ outbox_event
+~~~
+
+这些表不一定必须全部在一个物理 schema，但它们对应的是不同业务生命周期。
+
+---
+
+# B. 先画 ER，不先写 DDL
+
+~~~mermaid
+erDiagram
+    TENANT ||--o{ AGENT_DEFINITION : owns
+    AGENT_DEFINITION ||--o{ AGENT_VERSION : versions
+    TENANT ||--o{ SESSION : owns
+    SESSION ||--o{ TURN : contains
+    TURN ||--o{ RUN : attempts
+    RUN ||--o{ RUN_STEP : contains
+    RUN_STEP ||--o| TOOL_CALL : may_trigger
+    TOOL_CALL ||--o| TOOL_APPROVAL : may_require
+    RUN ||--o{ CHECKPOINT : checkpoints
+    RUN ||--o{ USAGE_LEDGER : consumes
+~~~
+
+这里最重要的三个拆分：
+
+~~~text
+Agent Definition ≠ Agent Version
+Turn ≠ Run
+Run Step ≠ Tool Call
+~~~
+
+这三个如果混在一起，后面 Retry、Resume、审计都会很痛苦。
+
+---
+
+# C. 先做 Invariant Matrix
+
+| 业务规则 | 数据库表达 |
+|---|---|
+| 一个 Agent 的 version_no 唯一 | UNIQUE(agent_id, version_no) |
+| 一个 Turn 的 attempt_no 唯一 | UNIQUE(turn_id, attempt_no) |
+| 一个 Run 的 step_no 唯一 | UNIQUE(run_id, step_no) |
+| 一个 Tool Call 的业务幂等键唯一 | UNIQUE(idempotency_key) |
+| 同一高风险 Tool 的审批代次唯一 | UNIQUE(tool_call_id, approval_generation) |
+| 每个用户 active Agent 不超过 quota | quota 行 + 条件 UPDATE / 锁 |
+| 某 schedule 某个时间点只生成一次 occurrence | UNIQUE(schedule_id, scheduled_at) |
+| 每条 usage 事实只记一次 | UNIQUE(provider_request_id) 或稳定 usage key |
+
+如果这些规则没有数据库约束，重试和并发迟早会把数据打乱。
+
+---
+
+# D. Query Matrix
+
+| Query | 条件 | 排序 | 调用方 |
+|---|---|---|---|
+| 用户 Agent 列表 | tenant,user,status | updated_at desc | Agent API |
+| Session 列表 | tenant,user | updated_at desc | UI |
+| Session 消息 | session_id | seq_no asc | Context Builder |
+| Turn 的所有 Run | turn_id | attempt_no asc | UI / Retry |
+| Run Timeline | run_id | step_no asc | Debug UI |
+| 待执行任务 | status,available_at | priority desc | Worker |
+| 待恢复任务 | status,lease_until | lease_until asc | Reaper |
+| Tool 审批队列 | status,tenant | created_at asc | Approval UI |
+| 月度用量 | tenant,period | - | Billing |
+| Run 用量明细 | run_id | id asc | Audit |
+
+索引应该围绕这些访问模式设计。
+
+---
+
+# E. Agent Definition 和 Version 为什么一定要拆
+
+最差设计：
+
+~~~text
+agent
+├─ id
+├─ name
+├─ system_prompt
+├─ model
+├─ tools_json
+└─ updated_at
+~~~
+
+用户一编辑：
+
+~~~text
+system_prompt v7
+↓
+直接覆盖
+↓
+v8
+~~~
+
+正在执行的 Run 如果继续读取 agent 当前字段，就会出现前半段用 v7、后半段用 v8，历史结果也无法复现。
+
+更合理：
+
+~~~sql
+CREATE TABLE agent_definition (
+    id                 BIGINT UNSIGNED NOT NULL,
+    tenant_id          BIGINT UNSIGNED NOT NULL,
+    owner_user_id      BIGINT UNSIGNED NOT NULL,
+    name               VARCHAR(128) NOT NULL,
+    current_version_id BIGINT UNSIGNED NULL,
+    lifecycle_status   TINYINT UNSIGNED NOT NULL,
+    created_at         DATETIME(3) NOT NULL,
+    updated_at         DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (id),
+    KEY idx_owner_status_updated
+        (tenant_id, owner_user_id, lifecycle_status, updated_at DESC, id DESC)
+) ENGINE=InnoDB;
+
+CREATE TABLE agent_version (
+    id           BIGINT UNSIGNED NOT NULL,
+    agent_id     BIGINT UNSIGNED NOT NULL,
+    version_no   INT UNSIGNED NOT NULL,
+    prompt_ref   VARCHAR(1024) NOT NULL,
+    model_config JSON NOT NULL,
+    tool_config  JSON NOT NULL,
+    config_hash  BINARY(32) NOT NULL,
+    created_at   DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_version (agent_id, version_no)
+) ENGINE=InnoDB;
+~~~
+
+Run 启动时绑定 agent_version_id，之后版本更新不影响已经运行的任务。
+
+---
+
+# F. Session / Turn / Run 为什么是三层
+
+~~~text
+Session
+= 长期对话容器
+
+Turn
+= 用户的一次输入及这一轮意图
+
+Run
+= 对某个 Turn 的一次具体执行尝试
+~~~
+
+例子：
+
+~~~text
+Session S1
+└─ Turn T18
+   ├─ Run R1 失败
+   ├─ Run R2 用户 Retry
+   └─ Run R3 从 checkpoint 恢复
+~~~
+
+如果 Turn 和 Run 合并，Retry 到底是覆盖原记录还是创建新执行，会变得非常混乱。
+
+---
+
+# G. 一个更完整的 Agent 核心 Schema
+
+~~~text
+agent_definition
+agent_version
+
+session
+session_member
+turn
+message
+
+run
+run_step
+tool_call
+tool_approval
+checkpoint
+task
+
+quota_period
+usage_ledger
+usage_projection
+
+audit_event
+outbox_event
+~~~
+
+不是为了“表越多越专业”，而是因为这些对象的生命周期真的不同。
+
+---
+
+# H. Mutation Matrix
+
+| 操作 | 本地事务 | 外部动作 | 关键风险 |
+|---|---|---|---|
+| 创建 Agent | quota + definition + version | 无 | 并发超额 |
+| 发布 Agent 新版本 | version + current pointer | 无 | version 冲突 |
+| 创建 Turn | turn + run + task | Queue 可异步 | 重试重复 |
+| Worker 抢任务 | task lease | 无 | 双 Worker |
+| 模型调用 | step start/end + usage | Provider | 超时不确定 |
+| Tool Call | tool_call 状态 | 外部 Tool | 重复副作用 |
+| 人工审批 | approval + tool 状态 | 无 | 重复批准 |
+| Checkpoint | checkpoint pointer | Object Storage | blob/DB 不一致 |
+| Run 完成 | run + outbox | 通知/计费异步 | 事件丢失 |
+
+这张表比单独看 DDL 更能体现 Agent 数据库真正的复杂度。
+
+---
+
+# I. 接下来保留原章节的 Run、Tool、Resume、Quota 深挖
+
+下面原有内容继续讲具体实现，但现在请始终追问：
+
+~~~text
+这张表代表什么生命周期？
+对应哪个业务不变量？
+对应哪个 Query？
+为什么必须单独存在？
+失败后用哪一份持久化状态恢复？
+~~~
+
+---
+
 
 > 很多人第一次做 Agent，会觉得：
 >
@@ -1191,4 +1477,321 @@ version
 
 继续看：
 
-> [03｜从场景反推 InnoDB：索引、MVCC、锁与事务](./03-innodb-from-scenes.md)
+> [03｜MySQL 索引怎么设计](./03-index-design.md)
+
+
+---
+
+# 31. 新场景：多人共享 Session，为什么需要 session_member
+
+企业 Agent 可能允许：
+
+~~~text
+用户 A 创建 Session
+用户 B 被邀请加入
+用户 C 只有只读权限
+~~~
+
+不要把 session.owner_user_id 硬扩展成 member_ids JSON。
+
+更合理：
+
+~~~sql
+CREATE TABLE session_member (
+    session_id BIGINT UNSIGNED NOT NULL,
+    user_id    BIGINT UNSIGNED NOT NULL,
+    role       TINYINT UNSIGNED NOT NULL,
+    joined_at  DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (session_id, user_id),
+    KEY idx_user_session (user_id, session_id)
+) ENGINE=InnoDB;
+~~~
+
+它允许一个 Session 多成员、一个用户加入多个 Session、独立权限和双向查询。
+
+---
+
+# 32. 新场景：人工审批 Tool
+
+高风险 Tool：
+
+~~~text
+delete_resource
+transfer_money
+publish_to_prod
+send_external_email
+~~~
+
+可以有：
+
+~~~sql
+CREATE TABLE tool_approval (
+    id                  BIGINT UNSIGNED NOT NULL,
+    tool_call_id        BIGINT UNSIGNED NOT NULL,
+    approval_generation INT UNSIGNED NOT NULL,
+    status              TINYINT UNSIGNED NOT NULL,
+    requested_by        BIGINT UNSIGNED NOT NULL,
+    decided_by          BIGINT UNSIGNED NULL,
+    reason              VARCHAR(1024) NULL,
+    expires_at          DATETIME(3) NOT NULL,
+    created_at          DATETIME(3) NOT NULL,
+    decided_at          DATETIME(3) NULL,
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_call_generation
+        (tool_call_id, approval_generation),
+    KEY idx_pending
+        (status, expires_at, created_at, id)
+) ENGINE=InnoDB;
+~~~
+
+为什么审批不能直接存在 tool_call.approved=true？
+
+因为审批本身也有生命周期和审计要求：
+
+~~~text
+谁申请？
+谁批准？
+何时过期？
+是否拒绝？
+是否重新发起第二轮审批？
+~~~
+
+---
+
+# 33. Tool Call 状态必须能表达 UNKNOWN
+
+真实外部调用：
+
+~~~text
+Worker -> Cloud API: delete VM
+Cloud API 执行成功
+网络在返回途中断开
+Worker 超时
+~~~
+
+本地数据库无法知道成功还是失败。
+
+所以状态机至少要允许：
+
+~~~text
+PENDING
+EXECUTING
+SUCCEEDED
+FAILED
+UNKNOWN
+~~~
+
+如果把 UNKNOWN 当 FAILED 自动重试，就可能产生重复副作用。
+
+恢复策略应该是：
+
+~~~text
+UNKNOWN
+↓
+使用 external_request_id / idempotency_key
+↓
+查询远端真实状态
+↓
+reconcile
+~~~
+
+---
+
+# 34. 新场景：定时 Agent
+
+用户设置每天 08:00 生成日报。
+
+需要区分：
+
+~~~text
+schedule_definition
+scheduled_occurrence
+run
+~~~
+
+表：
+
+~~~sql
+CREATE TABLE scheduled_occurrence (
+    id           BIGINT UNSIGNED NOT NULL,
+    schedule_id  BIGINT UNSIGNED NOT NULL,
+    scheduled_at DATETIME(3) NOT NULL,
+    status       TINYINT UNSIGNED NOT NULL,
+    run_id       BIGINT UNSIGNED NULL,
+    created_at   DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_schedule_time (schedule_id, scheduled_at),
+    KEY idx_due (status, scheduled_at, id)
+) ENGINE=InnoDB;
+~~~
+
+为什么需要 occurrence？
+
+因为 scheduler 可能重启、重复扫描、主从切换，但同一个 08:00 逻辑执行只应该生成一次。
+
+---
+
+# 35. 并发 Run 配额和 Agent 创建配额不是一回事
+
+~~~text
+Agent 创建配额
+= 一个用户最多有多少个 Agent
+
+Run 并发配额
+= 此刻最多同时跑多少个 Run
+
+Token 月度配额
+= 一个结算周期最多消费多少 Token
+~~~
+
+三个约束生命周期不同，不能只做一个 quota 表。
+
+可能分别建 agent_quota、concurrency_quota、quota_period。
+
+---
+
+# 36. 月度配额为什么要建 period
+
+错误：
+
+~~~text
+tenant_usage.used_tokens
+每月一号 used_tokens = 0
+~~~
+
+更合理：
+
+~~~sql
+CREATE TABLE quota_period (
+    id           BIGINT UNSIGNED NOT NULL,
+    tenant_id    BIGINT UNSIGNED NOT NULL,
+    period_start DATE NOT NULL,
+    period_end   DATE NOT NULL,
+    token_quota  BIGINT UNSIGNED NOT NULL,
+    created_at   DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_tenant_period (tenant_id, period_start)
+) ENGINE=InnoDB;
+~~~
+
+这样历史月份不会被“清零”覆盖，账单、审计、跨月 Run 都有明确归属。
+
+---
+
+# 37. usage_ledger 还需要防重复记账
+
+Provider 超时、消息重复投递或消费重试，都可能导致同一 usage 被再次写入。
+
+因此 usage_ledger 常需要一个稳定去重键，例如：
+
+~~~text
+provider_request_id
+或
+(run_id, step_id, usage_generation)
+~~~
+
+数据库 UNIQUE 再次成为最后一道幂等防线。
+
+---
+
+# 38. Checkpoint blob 和数据库如何保持一致
+
+Checkpoint 很大，通常：
+
+~~~text
+state blob -> Object Storage
+metadata -> MySQL
+~~~
+
+但可能：
+
+~~~text
+对象存储上传成功
+↓
+DB INSERT checkpoint 失败
+↓
+留下 orphan blob
+~~~
+
+反过来，DB 指针已提交但 blob 不可读更加危险。
+
+工程上需要设计临时 object key、hash、finalize 状态、orphan GC、完整性检查，并保证 DB 只指向 finalized blob。
+
+“数据库只保存引用”也不是零成本设计。
+
+---
+
+# 39. 审计日志和运行日志不是一回事
+
+Audit Event：
+
+~~~text
+谁修改了 Agent 权限
+谁批准了 Tool
+谁删除了 Session
+管理员何时导出数据
+~~~
+
+这是合规事实。
+
+Debug Log：
+
+~~~text
+worker retry #3
+HTTP 502
+tool stdout line 1831
+~~~
+
+这是可观测性数据。
+
+前者可能需要不可轻易修改并长期保留，后者更适合日志系统。
+
+---
+
+# 40. Agent 数据库最终应该形成的地图
+
+~~~mermaid
+flowchart TB
+    subgraph Def["Definition"]
+      AD["agent_definition"]
+      AV["agent_version"]
+    end
+
+    subgraph Conv["Conversation"]
+      S["session"]
+      SM["session_member"]
+      T["turn"]
+      M["message"]
+    end
+
+    subgraph Exec["Execution"]
+      R["run"]
+      RS["run_step"]
+      TC["tool_call"]
+      TA["tool_approval"]
+      CP["checkpoint"]
+      TASK["task"]
+    end
+
+    subgraph Bill["Billing"]
+      QP["quota_period"]
+      UL["usage_ledger"]
+      UP["usage_projection"]
+    end
+
+    Def --> R
+    Conv --> R
+    R --> RS --> TC --> TA
+    R --> CP
+    R --> UL
+    R --> TASK
+    UL --> UP
+~~~
+
+真正掌握 Agent + MySQL，不是会背这些表名。
+
+而是看到一个新需求，例如“支持多人协作 Agent + 高风险工具审批 + 定时运行 + 月度预算”，你能自己把它拆成不同生命周期，再推导出表、唯一约束、索引和事务边界。
