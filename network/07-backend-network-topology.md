@@ -247,3 +247,191 @@ Client → TLS → L4 LB → Backend
 ~~~
 
 所以使用 LB 不等于一定在那里解 TLS。
+
+
+---
+
+# 9. 为什么 L7 Routing 经常要先解 TLS？
+
+HTTPS 里的：
+
+~~~text
+GET /orders
+Host: api.example.com
+Header: ...
+~~~
+
+都在 TLS 保护内。要根据 Path、Host、Header 做 L7 Routing，就需要先解密并解析 HTTP。
+
+因此 L7 Proxy / Gateway 经常同时承担 TLS Termination。
+
+---
+
+# 10. Nginx、Envoy、API Gateway 怎么区分？
+
+能力有重叠，侧重点不同。
+
+Nginx 常见职责：Reverse Proxy、TLS、Static File、HTTP Routing、Load Balancing、Cache。
+
+Envoy 常见职责：L7 Proxy、HTTP/2 / gRPC、Dynamic Discovery、Retry / Timeout、mTLS、Observability、Service Mesh Data Plane。
+
+API Gateway 更强调：外部 API 入口、Authentication / Authorization、Rate Limit、Routing、API Policy、Protocol Translation、Aggregation、Tenant / Quota。
+
+所以它们不是严格互斥的类别。
+
+---
+
+# 11. Reverse Proxy 与 Forward Proxy
+
+Reverse Proxy：
+
+~~~text
+Client
+ ↓
+Reverse Proxy
+ ↓
+Backend
+~~~
+
+代表 Server 一侧，隐藏真实 Backend。
+
+Forward Proxy：
+
+~~~text
+Client
+ ↓
+Forward Proxy
+ ↓
+Internet Server
+~~~
+
+更像代表 Client 出网。
+
+---
+
+# 12. 为什么 Backend 经常看不到真实 Client IP？
+
+~~~text
+Client
+1.2.3.4
+ ↓
+Proxy
+10.0.0.5
+ ↓
+Backend
+10.0.0.20
+~~~
+
+如果 Proxy 重新建立 TCP Connection，那么 Backend 的 TCP Peer 本来就只是 10.0.0.5。这不是信息丢错了，而是连接拓扑真的改变了。
+
+原始 Client IP 需要通过额外可信元数据传递。
+
+---
+
+# 13. X-Forwarded-For 与 Forwarded
+
+常见：
+
+~~~text
+X-Forwarded-For: 1.2.3.4
+X-Forwarded-Proto: https
+X-Forwarded-Host: api.example.com
+~~~
+
+标准化 Forwarded 形式可以表达：
+
+~~~text
+Forwarded: for=192.0.2.60;proto=https;host=example.com
+~~~
+
+但客户端也能伪造这些 Header。
+
+因此 Backend 不能无条件信任，而要结合 Trusted Proxy List、Edge 清洗和追加策略。
+
+---
+
+# 14. PROXY Protocol 为什么存在？
+
+X-Forwarded-For 属于 HTTP 层。如果后端接的是 raw TCP、TLS Passthrough、SMTP、MySQL Protocol 或其他 L4 Protocol，就没有 HTTP Header 可用。
+
+PROXY Protocol 的思路：
+
+~~~text
+L4 LB
+ ↓
+PROXY metadata
+ ↓
+original src / dst
+ ↓
+real application bytes
+~~~
+
+所以：
+
+~~~text
+X-Forwarded-For
+→ HTTP 层
+
+PROXY Protocol
+→ 更通用的连接级代理元数据
+~~~
+
+---
+
+# 15. 一次公网 HTTPS 请求怎样进入服务？
+
+~~~text
+Browser
+ ↓
+DNS
+ ↓
+Public Edge IP
+ ↓
+TCP 443 或 QUIC UDP 443
+ ↓
+CDN / Edge
+ ↓
+TLS
+ ↓
+WAF
+ ↓
+HTTP Routing
+ ↓
+Origin LB
+ ↓
+Nginx / Envoy / API Gateway
+ ↓
+Backend Service
+~~~
+
+这时才真正进入业务逻辑。
+
+---
+
+# 16. 公网协议和内网协议可以不同
+
+例如：
+
+~~~text
+Browser → Gateway
+HTTP/2 + JSON
+
+Gateway → Order Service
+gRPC + Protobuf
+~~~
+
+Gateway 可能完成：
+
+~~~text
+Auth
+ ↓
+Rate Limit
+ ↓
+Route Match
+ ↓
+Protocol Translation
+ ↓
+Internal RPC
+~~~
+
+所以一个用户 HTTP Request 可以在内部变成 RPC。
