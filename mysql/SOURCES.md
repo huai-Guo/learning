@@ -210,3 +210,30 @@ InnoDB 每张表有 clustered index；显式 PRIMARY KEY 通常就是 clustered 
 - [Clustered and Secondary Indexes](https://dev.mysql.com/doc/refman/8.4/en/innodb-index-types.html)
 
 这也是 00 章把主键设计放进 Schema Design，而不是把它仅仅当作“自增 ID 语法”的原因。
+
+
+---
+
+## 8. 索引设计与执行计划
+
+- [Optimization and Indexes](https://dev.mysql.com/doc/refman/8.4/en/optimization-indexes.html)
+- [Multiple-Column Indexes](https://dev.mysql.com/doc/refman/8.4/en/multiple-column-indexes.html)
+- [Index Condition Pushdown](https://dev.mysql.com/doc/refman/8.4/en/index-condition-pushdown-optimization.html)
+- [EXPLAIN Statement / EXPLAIN ANALYZE](https://dev.mysql.com/doc/refman/8.4/en/explain.html)
+- [Optimizer Statistics / Histograms](https://dev.mysql.com/doc/refman/8.4/en/optimizer-statistics.html)
+- [Hash Join Optimization](https://dev.mysql.com/doc/refman/8.4/en/hash-joins.html)
+
+本课程因此不采用“选择性高的一定放最左”“范围后所有列彻底失效”“有索引就一定使用”等过度简化口诀，而要求用 Query Pattern + 数据分布 + EXPLAIN / EXPLAIN ANALYZE 验证。
+
+---
+
+## 9. InnoDB 内存与磁盘结构
+
+- [InnoDB Storage Engine](https://dev.mysql.com/doc/refman/8.4/en/innodb-storage-engine.html)
+- [Buffer Pool](https://dev.mysql.com/doc/refman/8.4/en/innodb-buffer-pool.html)
+- [Change Buffer](https://dev.mysql.com/doc/refman/8.4/en/innodb-change-buffer.html)
+- [Adaptive Hash Index](https://dev.mysql.com/doc/refman/8.4/en/innodb-adaptive-hash.html)
+- [Doublewrite Buffer](https://dev.mysql.com/doc/refman/8.4/en/innodb-doublewrite-buffer.html)
+- [InnoDB Disk I/O](https://dev.mysql.com/doc/refman/8.4/en/innodb-disk-io.html)
+
+版本注意：MySQL 8.4 的 innodb_change_buffering 默认值为 none，Adaptive Hash Index 默认关闭。旧版本教程里的默认行为不能直接当成 MySQL 8.4 当前事实。
