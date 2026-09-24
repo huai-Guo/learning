@@ -67,7 +67,7 @@
       <div class="grid-2">
         <div class="grid-card">
           <span class="tag blue">TCP/IP 视角</span>
-          <div class="codebox">Application
+          <div class="diagram">Application
 HTTP / TLS / DNS / RPC
         ↓
 Transport
@@ -82,7 +82,7 @@ Ethernet / Wi-Fi</div>
         </div>
         <div class="grid-card">
           <span class="tag purple">OSI 视角</span>
-          <div class="codebox">7 Application
+          <div class="diagram">7 Application
 6 Presentation
 5 Session
 4 Transport
@@ -135,7 +135,7 @@ Ethernet / Wi-Fi</div>
           <p>典型 IPv4 情况可近似理解为 MTU - IP Header - TCP Header，因此常见约 1460 字节。</p>
         </div>
       </div>
-      <div class="codebox" style="margin-top:14px">应用数据
+      <div class="diagram" style="margin-top:14px">应用数据
    ↓
 TCP 依据 MSS 切分
    ↓
@@ -157,7 +157,7 @@ L2 Frame</div>
         <div class="grid-card"><span class="tag orange">Neighbor</span><h3>下一跳 IP → 链路地址</h3><p>IPv4 Ethernet 常用 ARP；IPv6 使用 NDP。</p></div>
         <div class="grid-card"><span class="tag green">Link</span><h3>构造当前一跳 Frame</h3><p>这一层目标 MAC 只对当前链路有效；跨 Router 后会重新构造下一跳 L2 Header。</p></div>
       </div>
-      <div class="codebox" style="margin-top:14px">TCP Segment
+      <div class="diagram" style="margin-top:14px">TCP Segment
    ↓
 IP Packet
    ↓
@@ -245,7 +245,7 @@ Frame</div>
 
     <section class="summary" id="summary">
       <h2>9. 一页总结：从 send() 到 NIC，再从 NIC 回到应用</h2>
-      <div class="codebox">【发送】
+      <div class="diagram">【发送】
 Application
  ↓ send()
 Syscall
@@ -311,6 +311,7 @@ Application</div>
           </div>
         </div>
       </div>
+      <div class="chapter-nav"><a href="./01-url-to-webpage.html">← 01 · URL 到网页</a><a href="./03-ip-routing-arp-nat.html">03 · IP / Route / NAT →</a></div>
     </section>
   </main>
 </div>
