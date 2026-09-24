@@ -1469,7 +1469,7 @@ event_id 去重
 
 这些问题会在：
 
-> [03｜从场景反推 InnoDB：索引、MVCC、锁与事务](./03-innodb-from-scenes.md)
+> [03｜MySQL 索引怎么设计](./03-index-design.md)
 
 里统一拆开。
 
