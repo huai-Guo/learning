@@ -53,7 +53,7 @@
       <span class="eyebrow">第一步：分清“谁”</span>
       <h2>1. 一次访问至少横跨这些参与者</h2>
       <p class="intro">最常见的学习误区，是把所有步骤都画成一根箭头。先把参与者拆开，后面才能理解哪些事情发生在 Browser、Kernel、Router 或 Server。</p>
-      <div class="codebox">Browser / App
+      <div class="diagram">Browser / App
    │ 名称解析 / socket / TLS / HTTP
    ▼
 Client OS Kernel
@@ -79,7 +79,7 @@ DNS System
 CA / Trust Store</div>
       <div class="grid-2" style="margin-top:14px">
         <div class="grid-card"><span class="tag blue">角色图</span><p>回答“谁在做事”。例如 Browser、Kernel、Router、Server Process。</p></div>
-        <div class="grid-card"><span class="tag purple">协议栈</span><div class="codebox">HTTP
+        <div class="grid-card"><span class="tag purple">协议栈</span><div class="diagram">HTTP
  ↓
 TLS
  ↓
@@ -97,14 +97,14 @@ Ethernet / Wi-Fi</div><p>回答“数据被什么协议一层层包装”。它�
       <div class="grid-2">
         <div class="grid-card">
           <span class="tag blue">URL 解析</span>
-          <div class="codebox">https://shop.example.com:443/products?lang=zh-CN#reviews
+          <div class="diagram">https://shop.example.com:443/products?lang=zh-CN#reviews
 │       │                 │    │         │           │
 scheme  hostname          port path      query       fragment</div>
           <p>HTTPS 默认端口通常是 443。DNS 主要负责 hostname → 地址，不负责把 443“查出来”。fragment 一般只在浏览器本地使用。</p>
         </div>
         <div class="grid-card">
           <span class="tag green">名称解析</span>
-          <div class="codebox">Browser
+          <div class="diagram">Browser
   ↓
 本机 resolver / cache / hosts
   ↓ miss
@@ -129,13 +129,13 @@ A / AAAA / CNAME ...</div>
       <div class="grid-2">
         <div class="grid-card">
           <span class="tag orange">候选地址</span>
-          <div class="codebox">A     shop.example.com → 203.0.113.20
+          <div class="diagram">A     shop.example.com → 203.0.113.20
 AAAA  shop.example.com → 2001:db8::20</div>
           <p>更准确的说法不是“DNS 给我一个 IP”，而是“DNS 给我一组候选地址”。</p>
         </div>
         <div class="grid-card">
           <span class="tag purple">Happy Eyeballs</span>
-          <div class="codebox">对候选排序
+          <div class="diagram">对候选排序
    ↓
 connect(IPv6, 443)
    ↓ 短延迟后仍未成功
@@ -157,7 +157,7 @@ connect(IPv4, 443)
       <div class="grid-2">
         <div class="grid-card">
           <span class="tag blue">Socket</span>
-          <div class="codebox">Browser Process
+          <div class="diagram">Browser Process
    ↓ fd / handle
 Kernel Socket Object
    ├─ local IP / port
@@ -172,7 +172,7 @@ Kernel Socket Object
         </div>
         <div class="grid-card">
           <span class="tag red">顺序纠错</span>
-          <div class="codebox">connect()
+          <div class="diagram">connect()
   ↓
 TCP SYN 已存在
   ↓
@@ -198,7 +198,7 @@ NIC 发出去</div>
     <section class="section" id="nat">
       <span class="eyebrow">家庭路由器</span>
       <h2>5. NAT / PAT：发生在 Router 上，不是在 Client 本机 TCP 之前</h2>
-      <div class="codebox">Laptop 内部原始连接
+      <div class="diagram">Laptop 内部原始连接
 192.168.1.20:53124
         →
 203.0.113.20:443
@@ -215,7 +215,7 @@ NIC 发出去</div>
         →
 203.0.113.20:443</div>
       <div class="grid-2" style="margin-top:14px">
-        <div class="grid-card"><span class="tag red">不要机械画成</span><div class="codebox">NAT
+        <div class="grid-card"><span class="tag red">不要机械画成</span><div class="diagram">NAT
  ↓
 PAT</div><p>在典型 NAPT/PAT 中，地址和端口改写可以是同一次映射操作的一部分。</p></div>
         <div class="grid-card"><span class="tag green">为什么 PAT 有价值</span><p>多个私网主机可以共享一个公网 IPv4。外部端口帮助 NAT 设备区分并反向映射不同内部连接。</p></div>
@@ -228,7 +228,7 @@ PAT</div><p>在典型 NAPT/PAT 中，地址和端口改写可以是同一次映�
       <div class="grid-2">
         <div class="grid-card">
           <span class="tag blue">Internet Routing</span>
-          <div class="codebox">Home Router
+          <div class="diagram">Home Router
    ↓
 ISP Access
    ↓
@@ -243,7 +243,7 @@ Server / Edge</div>
         </div>
         <div class="grid-card">
           <span class="tag green">Server 侧</span>
-          <div class="codebox">Server NIC
+          <div class="diagram">Server NIC
  ↓
 Kernel IP
  ↓
@@ -273,7 +273,7 @@ Server Process</div>
       <div class="grid-2">
         <div class="grid-card">
           <span class="tag purple">网站部署前</span>
-          <div class="codebox">Site / Operator
+          <div class="diagram">Site / Operator
   ↓ 申请证书 + 域名控制验证
 CA / Intermediate CA
   ↓ 签发
@@ -287,7 +287,7 @@ Browser / OS
         </div>
         <div class="grid-card">
           <span class="tag green">用户访问时</span>
-          <div class="codebox">ClientHello
+          <div class="diagram">ClientHello
  ↓
 ServerHello
  ↓
@@ -339,7 +339,7 @@ Client Finished</div>
       <div class="grid-2">
         <div class="grid-card">
           <span class="tag blue">HTTP/1.1 逻辑</span>
-          <div class="codebox">GET /products?lang=zh-CN HTTP/1.1
+          <div class="diagram">GET /products?lang=zh-CN HTTP/1.1
 Host: shop.example.com
 User-Agent: ...
 Accept: ...</div>
@@ -347,7 +347,7 @@ Accept: ...</div>
         </div>
         <div class="grid-card">
           <span class="tag green">返回链</span>
-          <div class="codebox">Server Response
+          <div class="diagram">Server Response
  ↓
 Internet
  ↓
@@ -371,7 +371,7 @@ Browser</div>
 
     <section class="summary" id="master">
       <h2>9. 最终母图：后面所有章节都从这里拆出去</h2>
-      <div class="codebox">【Browser】
+      <div class="diagram">【Browser】
 URL
  ↓
 名称解析
@@ -469,6 +469,7 @@ Encrypted HTTP Response</div>
           </div>
         </div>
       </div>
+      <div class="chapter-nav"><a href="./00-network-bootstrap.html">← 00 · 网络启动</a><a href="./02-network-model-and-packets.html">02 · OS 收发包 →</a></div>
     </section>
   </main>
 </div>
