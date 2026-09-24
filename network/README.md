@@ -116,7 +116,7 @@ IP
 0. [电脑刚连上网络时，先拿到了什么？](./00-network-bootstrap.md)  
    DHCP、本机 IP、子网、默认网关、DNS Server。
 
-1. [从输入 URL 到网页返回](./01-url-to-webpage.md)  
+1. [从输入 URL 到网页返回](./01-url-to-webpage.md) · [HTML 视觉版](./01-url-to-webpage.html)  
    把 DNS、Socket、TCP、Route、ARP/NDP、NAT/PAT、TLS、HTTP 串成一条真实请求。
 
 2. [网络分层、封装与 OS 收发包](./02-network-model-and-packets.md) · [HTML 视觉版](./02-network-model-and-packets.html)  
@@ -137,11 +137,7 @@ IP
 7. [真实后端网络拓扑：公网入口到 Redis / MySQL](./07-backend-network-topology.md) · [HTML 视觉版](./07-backend-network-topology.html)  
    DNS → CDN/Edge → WAF → L4/L7 LB → TLS Termination → Nginx/Envoy/API Gateway → Backend → RPC → Redis/MySQL，并补齐 Forwarded、PROXY Protocol、连接池、Timeout/Retry、mTLS、Service Mesh 与排障。
 
-8. 08-labs.md  
-   Windows/Linux 命令、curl、OpenSSL、Wireshark、浏览器 DevTools。
-
-9. 09-review-and-interview.md  
-   用因果链复盘高频面试问题和排障问题。
+> 当前课程主线到 07 结束。接下来不新增第 08 章，而是持续把 01～07 打磨成统一、易读、图文并茂的视觉化教学材料。
 
 ---
 
