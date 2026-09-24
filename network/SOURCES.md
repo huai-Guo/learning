@@ -110,6 +110,31 @@ WebSocket over HTTP/3：
 
 - RFC 9220: https://www.rfc-editor.org/rfc/rfc9220
 
+Forwarded HTTP Extension：
+
+- RFC 7239: https://www.rfc-editor.org/rfc/rfc7239
+
+Nginx Reverse Proxy / Load Balancing：
+
+- https://docs.nginx.com/nginx/admin-guide/web-server/reverse-proxy/
+- https://docs.nginx.com/nginx/admin-guide/load-balancer/http-load-balancer/
+
+Envoy：
+
+- https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/arch_overview
+- https://www.envoyproxy.io/docs/envoy/latest/api-docs/xds_protocol
+
+Kubernetes Service / Probes：
+
+- https://kubernetes.io/docs/concepts/services-networking/service/
+- https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/
+
+gRPC reliability / connection behavior：
+
+- https://grpc.io/docs/guides/deadlines/
+- https://grpc.io/docs/guides/keepalive/
+- https://grpc.io/docs/guides/retry/
+
 ---
 
 # 3. 本项目会主动强调的准确性问题
@@ -141,3 +166,11 @@ WebSocket over HTTP/3：
 25. WebSocket 是应用层双向消息协议，不写成 Socket API，也不写成 HTTP/2/3 的替代品。
 26. RPC 定义为调用模型/框架集合，不写成固定网络协议；gRPC、Thrift、HTTP、TCP/QUIC 必须按层比较。
 27. Retry 必须和 Deadline、Idempotency / Deduplication 一起讨论，不能把网络超时等同于远端业务未执行。
+28. DNS 返回的公网 IP 不默认解释成业务 Server；在真实系统中它可能是 CDN、Anycast Edge、WAF、LB 或 Reverse Proxy。
+29. L4 与 L7 LB 按观察层次和路由粒度区分，不把产品名称直接等同于某一层。
+30. TLS Termination、Re-encrypt、Passthrough 分开；使用 LB 不代表一定在 LB 解 TLS。
+31. Backend 的 TCP peer 与 Original Client IP 分开；Forwarded / X-Forwarded-* 必须建立 Trusted Proxy Boundary。
+32. X-Forwarded-For 与 PROXY Protocol 分层解释：前者是 HTTP metadata，后者可用于更通用的连接级代理场景。
+33. Service Discovery 解决 Name → Endpoint Set；Load Balancing 解决本次选哪个 Endpoint。
+34. 一次业务 Request 不画成一条端到端 TCP Connection；Proxy 和 Service 边界可能形成多条独立连接。
+35. API Gateway、Service Mesh、Trace ID、Connection ID 按治理对象与协议层分开解释。
