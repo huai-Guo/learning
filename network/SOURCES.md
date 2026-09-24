@@ -70,6 +70,18 @@ HTTP Semantics：
 
 - RFC 9110: https://www.rfc-editor.org/rfc/rfc9110
 
+HTTP Caching：
+
+- RFC 9111: https://www.rfc-editor.org/rfc/rfc9111
+
+HTTP/1.1：
+
+- RFC 9112: https://www.rfc-editor.org/rfc/rfc9112
+
+Cookies：
+
+- RFC 6265: https://www.rfc-editor.org/rfc/rfc6265
+
 HTTP/2：
 
 - RFC 9113: https://www.rfc-editor.org/rfc/rfc9113
@@ -98,3 +110,10 @@ QUIC Transport：
 10. 数字签名写成“私钥签名、公钥验证”，避免“私钥加密、公钥解密”的误导说法。
 11. HTTP/3 使用 QUIC/UDP，不把 HTTPS 永远绑定 TCP。
 12. Linux 内核实现细节与协议抽象分层讲，不拿某个 Linux 版本实现冒充协议规范。
+13. HTTP Method 优先按协议语义解释，不把 GET/POST 简化成 URL 参数 vs Body。
+14. Host、SNI、:authority 分协议阶段解释，不因为值相同就当成同一个字段。
+15. TLS 1.3 cipher suite 主要表达 AEAD + Hash；Key Exchange 与 Signature Algorithm 分开协商。
+16. Certificate 上的 CA Signature 与 TLS CertificateVerify 分开解释。
+17. Root CA 通常来自本地 Trust Store；Server 通常发送 Leaf + Intermediate，而不是把 Root 当作每次握手必发证书。
+18. TLS 1.3 不写成“永远只有 ECDHE”；恢复场景允许 PSK / PSK+(EC)DHE，0-RTT 必须提示 Replay 风险。
+19. HTTPS 明确区分“保护 HTTP 内容”与“仍可暴露 IP、大小、时序等 metadata”，经典 SNI 与传统 DNS 也可能泄露 hostname。
