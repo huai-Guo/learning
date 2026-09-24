@@ -134,8 +134,8 @@ IP
 6. [HTTP/2、HTTP/3、QUIC、WebSocket、RPC](./06-modern-protocols.md) · [HTML 视觉版](./06-modern-protocols.html)  
    Binary Frame、Stream/Multiplexing、TCP HOL、QUIC Packet/Stream、Connection ID、QPACK、WebSocket、gRPC/Thrift、Deadline/Retry、服务发现与负载均衡。
 
-7. 07-backend-network-topology.md  
-   CDN / WAF / L4-L7 LB / Nginx / Gateway / RPC / Redis / MySQL。
+7. [真实后端网络拓扑：公网入口到 Redis / MySQL](./07-backend-network-topology.md) · [HTML 视觉版](./07-backend-network-topology.html)  
+   DNS → CDN/Edge → WAF → L4/L7 LB → TLS Termination → Nginx/Envoy/API Gateway → Backend → RPC → Redis/MySQL，并补齐 Forwarded、PROXY Protocol、连接池、Timeout/Retry、mTLS、Service Mesh 与排障。
 
 8. 08-labs.md  
    Windows/Linux 命令、curl、OpenSSL、Wireshark、浏览器 DevTools。
