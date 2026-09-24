@@ -119,7 +119,7 @@ IP
 1. [从输入 URL 到网页返回](./01-url-to-webpage.md)  
    把 DNS、Socket、TCP、Route、ARP/NDP、NAT/PAT、TLS、HTTP 串成一条真实请求。
 
-2. 02-network-model-and-packets.md  
+2. [网络分层、封装与 OS 收发包](./02-network-model-and-packets.md) · [HTML 视觉版](./02-network-model-and-packets.html)  
    网络分层、封装/解封装、用户态 → 内核 → 驱动 → 网卡、MTU/MSS。
 
 3. 03-ip-routing-arp-nat.md  
