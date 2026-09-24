@@ -45,6 +45,7 @@ flowchart LR
 | 11 | [10-面试题库](10-interview-bank.md) | 截图 23 题 + 扩展高频题 |
 | 12 | [11-系统设计案例](11-system-design-cases.md) | 企业 RAG、高并发 Chat、Coding Agent |
 | 13 | [12-论文与源码路线](12-papers-and-source.md) | 继续深挖论文和源码 |
+| 14 | [13-7天速成计划](13-seven-day-crash-plan.md) | 每天学什么、画什么、怎么自测 |
 
 ## 2. LLM 生命周期
 
