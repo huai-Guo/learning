@@ -7,7 +7,7 @@
 ## 专题
 
 - [计算机网络扫盲](network/README.md)：从电脑联网、DNS、TCP/IP、TLS、HTTP，一直走到真实后端网络拓扑，并配套 Mermaid 与 HTML 视觉版。
-- [MySQL 情景化学习](mysql/README.md)：不从 SQL 语法表开始背，而是通过短视频与 Agent 两条真实业务主线理解表设计、索引、事务、锁、MVCC、日志、一致性与扩展。
+- [MySQL 数据库设计与情景化学习](mysql/README.md)：从业务需求、数据库边界、实体关系和表设计开始，再通过短视频与 Agent 深挖索引、事务、并发、一致性、恢复与扩展。
 - [LLM 大模型面试速成路线](llm/README.md)：从 Transformer、BERT/GPT、预训练、后训练，到 RAG、Agent、MoE、Serving、评测与系统设计。
 
 ## 学习方式
