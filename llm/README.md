@@ -4,6 +4,19 @@
 
 这套资料不是“背 23 道题”，而是把题目放回它们真正所属的知识链。
 
+
+## 图文化入口（推荐）
+
+如果你不想从纯文字 Markdown 开始，优先打开这些页面：
+
+- [LLM 总览首页](index.html)
+- [Transformer / BERT / GPT 图解](transformer.html)
+- [Pretraining / Post-training 图解](training.html)
+- [Inference / Serving 图解](inference-serving.html)
+- [RAG / Agent 图解](rag-agent.html)
+
+这些页面使用浅色卡片、流程图、对比图、悬浮解释和章节导航；Markdown 章节继续作为更完整的文字参考。
+
 ## 0. 总地图
 
 ~~~mermaid
