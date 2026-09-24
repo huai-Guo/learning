@@ -58,7 +58,45 @@ Query
 最后反推 InnoDB 为什么这样工作
 ~~~
 
-所以本专题最重要的是前 3 章，而不是先去背 B+Tree。
+所以这套路线不会把“数据库设计”和“MySQL 本身”二选一：前 3 章先建立真实业务问题，03 开始系统学习索引，04～06 再深入 InnoDB、事务、MVCC、锁与日志，让设计决策能够落到底层机制。
+
+---
+
+# 0.1 你最终要同时具备三层能力
+
+~~~text
+第一层：Schema / 数据库设计
+业务对象怎么拆？
+表为什么存在？
+约束怎么表达？
+
+第二层：Query / Index 设计
+一条 SQL 应该走哪棵索引？
+联合索引字段顺序怎么排？
+如何用 EXPLAIN / EXPLAIN ANALYZE 验证？
+
+第三层：InnoDB 内核
+B+Tree / Page / Buffer Pool 怎么工作？
+MVCC 为什么能做到读写并发？
+Record / Gap / Next-Key Lock 锁在哪里？
+Redo / Undo / Binlog / Doublewrite 分别解决什么？
+~~~
+
+三层不能缺一层：
+
+~~~text
+只会 Schema
+→ 会画表，但不知道 SQL 为什么慢
+
+只会索引口诀
+→ 会背最左前缀，但不会从业务 Query 推导
+
+只会 InnoDB 八股
+→ 会背 Buffer Pool / Redo，却不会把机制用于真实系统
+
+三层串起来
+→ 才能从需求一直推导到物理执行
+~~~
 
 ---
 
