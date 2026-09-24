@@ -125,8 +125,8 @@ IP
 3. [IP、CIDR、Route、ARP/NDP、ICMP、NAT](./03-ip-routing-arp-nat.md) · [HTML 视觉版](./03-ip-routing-arp-nat.html)  
    IPv4/IPv6、CIDR、最长前缀匹配、ARP/NDP、ICMP、ping/traceroute、SNAT/DNAT/PAT、Conntrack、CGNAT。
 
-4. 04-tcp-udp.md  
-   四元组、三次握手、四次挥手、重传、窗口、拥塞、队列、故障场景。
+4. [TCP / UDP：可靠传输与状态机](./04-tcp-udp.md) · [HTML 视觉版](./04-tcp-udp.html)  
+   四元组、监听/连接 Socket、三次握手、Seq/Ack、重传、rwnd/cwnd、四次挥手、TIME_WAIT/CLOSE_WAIT、Keepalive、RST、故障场景。
 
 5. 05-http-https-tls.md  
    HTTP、TLS 1.2/1.3、ECDHE、数字签名、证书链、SNI、ALPN。
