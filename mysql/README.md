@@ -1,4 +1,4 @@
-# MySQL 情景化学习：先学数据库设计，再学底层机制
+# MySQL 完整学习路线：数据库设计 × 索引设计 × InnoDB 内核 × 事务与扩展
 
 > 目标不是“会写 SQL”，而是：
 >
@@ -242,10 +242,12 @@ Billing / Audit
 | 1 | [00｜从业务需求设计数据库与表](./00-database-table-design.md) | 一张表到底应该怎么从 0 设计出来 |
 | 2 | [01｜短视频：从产品需求一步步设计数据库](./01-short-video-scenes.md) | 视频、版本、资产、审核、发布、点赞、收藏、评论、关注如何拆表 |
 | 3 | [02｜Agent：从产品需求一步步设计数据库](./02-agent-scenes.md) | Agent、Session、Run、Tool、Checkpoint、Quota、Billing 如何持久化 |
-| 4 | [03｜从场景反推 InnoDB](./03-innodb-from-scenes.md) | 为什么这些索引、锁、MVCC 设计能工作 |
-| 5 | [04｜从 COMMIT 到宕机恢复](./04-commit-and-consistency.md) | redo、undo、binlog、WAL、Group Commit、Outbox |
-| 6 | [05｜规模上来以后](./05-scaling-and-operations.md) | 慢查询、热点、Replica、Partition、Shard、Online DDL |
-| 7 | [06｜复杂设计案例库](./06-complex-design-casebook.md) | 评论、关注、上传、审批、定时任务、月度配额等综合案例 |
+| 4 | [03｜MySQL 索引怎么设计](./03-index-design.md) | 联合索引顺序、范围、排序、覆盖、ICP、EXPLAIN / ANALYZE |
+| 5 | [04｜MySQL / InnoDB 内部](./04-innodb-internals.md) | Parser、Optimizer、Executor、Page、Buffer Pool、B+Tree、Redo/Undo |
+| 6 | [05｜事务、MVCC 与锁](./05-transactions-mvcc-locks.md) | Read View、隔离级别、Record/Gap/Next-Key Lock、Deadlock |
+| 7 | [06｜从 COMMIT 到宕机恢复](./06-commit-and-consistency.md) | redo、undo、binlog、WAL、Group Commit、Crash Recovery |
+| 8 | [07｜规模上来以后](./07-scaling-and-operations.md) | 慢查询、热点、Replica、Partition、Shard、Online DDL |
+| 9 | [08｜复杂设计案例库](./08-complex-design-casebook.md) | 评论、关注、上传、审批、定时任务、月度配额等综合案例 |
 | - | [参考资料](./SOURCES.md) | MySQL 8.4 官方文档与工程模式说明 |
 
 ---
