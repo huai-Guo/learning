@@ -12,81 +12,185 @@
     <h2>07 · 真实后端拓扑</h2>
     <p>把前面所有协议放回生产环境：公网入口、代理、网关、RPC、缓存、数据库。</p>
     <a href="#hero">0. 学习目标</a>
-    <a href="#edge">1. DNS / CDN / WAF / LB</a>
-    <a href="#tls">2. TLS Termination</a>
-    <a href="#proxy">3. Proxy / Client IP</a>
-    <a href="#rpc">4. Gateway / RPC / Discovery</a>
-    <a href="#pool">5. Connection / Timeout / Retry</a>
-    <a href="#data">6. Redis / MySQL</a>
-    <a href="#ops">7. Readiness / Drain / Mesh</a>
-    <a href="#views">8. 三张图</a>
-    <a href="#troubleshoot">9. 分层排障</a>
-    <a href="#summary">10. 一页总结</a>
+    <a href="#responsibility">1. 职责图，不是假流水线</a>
+    <a href="#variants">2. 三种真实入口拓扑</a>
+    <a href="#edge">3. DNS / CDN / WAF / LB</a>
+    <a href="#proxy-stack">4. Nginx / Envoy / Gateway</a>
+    <a href="#client-ip">5. Proxy / Client IP</a>
+    <a href="#rpc">6. Gateway / RPC / Discovery</a>
+    <a href="#connections">7. 一次 Request，多条连接</a>
+    <a href="#pool">8. Pool / Timeout / Retry</a>
+    <a href="#data">9. Redis / MySQL</a>
+    <a href="#ops">10. Health / Drain / Mesh</a>
+    <a href="#views">11. 三张图与 Trace</a>
+    <a href="#troubleshoot">12. 分层排障</a>
+    <a href="#summary">13. 全课程收束</a>
   </aside>
 
   <main class="content">
     <section class="hero" id="hero">
       <span class="badge">Chapter 07 · Production Topology</span>
       <h1>真实后端网络拓扑：<br>一次公网请求怎样真正进入业务服务？</h1>
-      <p class="lead">真实系统通常不是 Browser 直接连业务进程，而是先进入 <b>DNS / CDN / Edge / WAF / LB / Gateway</b>，再通过 <b>Service Discovery + RPC</b> 进入内部服务，最后访问 Redis / MySQL 等基础设施。</p>
+      <p class="lead">真实系统不是“Browser 直接连业务进程”。更常见的是先进入 <b>CDN / Edge / WAF / LB / Gateway</b> 等入口层，再通过 <b>Service Discovery + RPC</b> 进入内部服务，最后访问 Redis / MySQL 等基础设施。</p>
       <div class="hero-grid">
         <div class="mini-card">
-          <h3>先记一句话</h3>
+          <h3>这章最重要的纠错</h3>
           <ul>
-            <li>这是一张“职责图”，不是“必须有很多台机器”的设备清单。</li>
-            <li>一个 Edge 节点完全可能同时承担 TLS、WAF、Cache、L7 Routing 等职责。</li>
+            <li>CDN → WAF → LB → TLS → Gateway 不是唯一固定顺序。</li>
+            <li>TLS Termination 是某个节点的能力，不是一台必然独立存在的“设备”。</li>
           </ul>
         </div>
         <div class="mini-card">
-          <h3>最重要的思维升级</h3>
+          <h3>思维升级</h3>
           <ul>
-            <li>一次业务 Request 往往跨越多条独立连接。</li>
-            <li>角色图、协议图、身份图必须分开理解。</li>
+            <li>一次业务 Request 可以跨很多独立 TCP / QUIC 连接。</li>
+            <li>角色图、协议图、身份图必须分开。</li>
           </ul>
         </div>
       </div>
-      <div class="top-links"><a href="./06-modern-protocols.html">上一章</a><a href="./07-backend-network-topology.md">完整 Markdown</a><a href="./index.html">返回课程首页</a></div>
+      <div class="top-links"><a href="./06-modern-protocols.html">上一章</a><a href="./07-backend-network-topology.md">完整 Markdown</a><a href="./index.html">课程首页</a></div>
+    </section>
+
+    <section class="section" id="responsibility">
+      <span class="eyebrow">先看职责，不要先数机器</span>
+      <h2>1. 生产网络应该先画“职责图”，而不是一条假装固定的流水线</h2>
+      <div class="architecture">
+        <div class="arch-node">
+          <h3>Client</h3>
+          <div class="arch-capabilities"><span>DNS</span><span>TCP / QUIC</span><span>TLS</span><span>HTTP</span></div>
+        </div>
+        <div class="arch-link">↓ Internet</div>
+        <div class="arch-node">
+          <h3>Public Edge / Entry</h3>
+          <div class="arch-capabilities"><span>CDN Cache</span><span>DDoS</span><span>WAF</span><span>L4/L7 LB</span><span>TLS Termination 或 Passthrough</span><span>HTTP Routing</span></div>
+        </div>
+        <div class="arch-link">↓ Origin / Internal Entry</div>
+        <div class="arch-node">
+          <h3>Gateway / Proxy Layer</h3>
+          <div class="arch-capabilities"><span>Nginx / Envoy</span><span>Auth</span><span>Rate Limit</span><span>Routing</span><span>Protocol Translation</span><span>Observability</span></div>
+        </div>
+        <div class="arch-link">↓ Service-to-Service</div>
+        <div class="arch-node">
+          <h3>Application Network</h3>
+          <div class="arch-capabilities"><span>Service Discovery</span><span>Load Balancing</span><span>RPC</span><span>mTLS</span></div>
+        </div>
+        <div class="arch-link">↓ Private Network</div>
+        <div class="arch-node">
+          <h3>Data / Infrastructure</h3>
+          <div class="arch-capabilities"><span>Redis</span><span>MySQL</span><span>MQ</span><span>Other Internal Services</span></div>
+        </div>
+      </div>
+      <div class="callout"><div class="icon">!</div><div><strong>职责可以合并在同一节点</strong><div>一个 CDN Edge 完全可能同时做 Cache、WAF、TLS Termination 和 L7 Routing；Nginx / Envoy / Gateway 的能力也存在重叠。</div></div></div>
+    </section>
+
+    <section class="section" id="variants">
+      <span class="eyebrow">真实系统存在多种部署法</span>
+      <h2>2. 三种典型入口拓扑：TLS 到底在哪里结束？</h2>
+      <div class="grid-3">
+        <div class="variant">
+          <span class="tag blue">A · Edge Termination</span>
+          <h3>边缘解 TLS，再回源</h3>
+          <div class="diagram">Client
+ ↓ TLS
+CDN / Edge
+ ├─ TLS Termination
+ ├─ WAF
+ ├─ Cache
+ └─ L7 Routing
+ ↓ HTTP or TLS
+Origin / Gateway
+ ↓
+Backend</div>
+          <p>适合 Edge 需要读取 HTTP 内容做缓存、WAF、路由的场景。</p>
+        </div>
+        <div class="variant">
+          <span class="tag orange">B · L4 Passthrough</span>
+          <h3>入口只做连接转发</h3>
+          <div class="diagram">Client
+ ↓ TLS
+L4 Load Balancer
+ ↓ TLS passthrough
+Nginx / Envoy / Backend
+ ├─ TLS Termination
+ └─ HTTP Routing</div>
+          <p>L4 LB 不需要看到 HTTP 内容，证书和 Private Key 可以留在后面的 TLS Endpoint。</p>
+        </div>
+        <div class="variant">
+          <span class="tag green">C · Re-encrypt</span>
+          <h3>边缘解密后，内部再次 TLS</h3>
+          <div class="diagram">Client
+ ↓ TLS Session A
+Edge / Gateway
+ ├─ WAF / Auth / Routing
+ └─ TLS client
+ ↓ TLS Session B
+Backend</div>
+          <p>中间层能治理应用请求，同时内部链路继续加密。</p>
+        </div>
+      </div>
+      <div class="callout"><div class="icon">i</div><div><strong>因此不要把 TLS Termination 画成固定夹在 “LB 后、Gateway 前” 的独立设备</strong><div>它应该标注在“哪一个节点结束了这段 TLS Session”上。</div></div></div>
     </section>
 
     <section class="section" id="edge">
       <span class="eyebrow">公网入口</span>
-      <h2>1. DNS / CDN / WAF / LB：用户首先连到的通常不是业务 Server</h2>
-      <div class="codebox">api.example.com
-      ↓ DNS
-203.0.113.50
-      ↓
-CDN / Anycast / WAF / Public LB
-      ↓
-10.23.4.17
-10.23.4.18
-10.23.5.22
-      ↓
-Backend Instances</div>
-      <div class="grid-3" style="margin-top:14px">
-        <div class="grid-card"><span class="tag green">CDN</span><p>Cache Hit 时直接在 Edge 返回；Cache Miss 才回源 Origin。它不只是“缓存服务器”，还可能承担 TLS、DDoS、WAF 等职责。</p></div>
-        <div class="grid-card"><span class="tag orange">L4 LB</span><p>主要按 IP / Port / Transport / Connection 分发，不必理解完整 HTTP Request。</p></div>
-        <div class="grid-card"><span class="tag purple">L7 LB</span><p>可以按 Host / Path / Header / Cookie 等做 Request-level Routing。</p></div>
-      </div>
-      <div class="callout"><div class="icon">i</div><div><strong>WAF 与 Network Firewall 不同</strong><div>Firewall 更偏 IP / Port / Protocol / Connection State；WAF 更偏 HTTP Method / Path / Header / Cookie / Body / Request Pattern。</div></div></div>
-    </section>
-
-    <section class="section" id="tls">
-      <span class="eyebrow">TLS 在哪里结束</span>
-      <h2>2. Termination、Re-encrypt、Passthrough：LB 不一定解 TLS</h2>
-      <div class="grid-3">
-        <div class="grid-card"><span class="tag blue">Terminate</span><div class="codebox">Client → TLS → Edge → HTTP → Backend</div><p>Edge 拿到 HTTP 明文，适合做 L7 Routing。</p></div>
-        <div class="grid-card"><span class="tag green">Re-encrypt</span><div class="codebox">Client → TLS A → Edge → TLS B → Backend</div><p>Edge 能治理请求，同时内部链路继续加密。</p></div>
-        <div class="grid-card"><span class="tag orange">Passthrough</span><div class="codebox">Client → TLS → L4 LB → Backend</div><p>中间 LB 不解 TLS，也就不能按 Path/Header 做完整 L7 判断。</p></div>
-      </div>
-      <div class="callout"><div class="icon">!</div><div><strong>为什么 L7 Routing 经常要求先解 TLS？</strong><div>因为 Host、Path、Header 等 HTTP 内容本来就在 TLS 里面。想看请求内容，就得先结束或解密这层 TLS。</div></div></div>
-    </section>
-
-    <section class="section" id="proxy">
-      <span class="eyebrow">代理与原始客户端信息</span>
-      <h2>3. Reverse Proxy 之后，Backend 为什么经常看不到真实 Client IP？</h2>
+      <h2>3. DNS、CDN、WAF、L4/L7 LB 分别负责什么？</h2>
       <div class="grid-2">
         <div class="grid-card">
-          <div class="codebox">Client 1.2.3.4
+          <span class="tag blue">DNS</span>
+          <div class="diagram">api.example.com
+      ↓
+203.0.113.50
+
+这个 IP 可能属于：
+CDN Edge / Anycast / WAF / Public LB
+而不是最终业务实例</div>
+          <p>DNS 通常选择“先进入哪个入口”，后面的 LB / Discovery 还会继续选择实际后端。</p>
+        </div>
+        <div class="grid-card">
+          <span class="tag green">CDN</span>
+          <div class="diagram">User
+ ↓
+Nearby Edge
+ ├─ Cache Hit  → 直接返回
+ └─ Cache Miss → 回源 Origin</div>
+          <p>所以用户请求量与 Origin 实际 QPS 可以完全不同。</p>
+        </div>
+      </div>
+      <div class="grid-3" style="margin-top:14px">
+        <div class="grid-card"><span class="tag red">WAF</span><p>观察 HTTP Method、Path、Header、Cookie、Body、频率与攻击模式；更偏 L7。</p></div>
+        <div class="grid-card"><span class="tag orange">L4 LB</span><p>更偏 IP / Port / Transport / Connection 级分发，可采用 NAT、Proxy、DSR 等不同实现。</p></div>
+        <div class="grid-card"><span class="tag purple">L7 LB</span><p>解析 HTTP 等应用协议，可按 Host / Path / Header / Cookie 做 Request-level Routing。</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="proxy-stack">
+      <span class="eyebrow">入口软件栈</span>
+      <h2>4. Nginx、Envoy、API Gateway：能力重叠，但关注点不同</h2>
+      <div class="grid-3">
+        <div class="grid-card"><span class="tag blue">Nginx</span><p>Reverse Proxy、TLS Termination、Static File、HTTP Routing、Load Balancing、Cache 等都很常见。</p></div>
+        <div class="grid-card"><span class="tag purple">Envoy</span><p>现代 L7 Proxy、HTTP/2 / gRPC、Dynamic Discovery、Retry / Timeout、mTLS、Telemetry、Service Mesh Data Plane。</p></div>
+        <div class="grid-card"><span class="tag green">API Gateway</span><p>更强调 External API 入口：Auth、Quota、Rate Limit、Routing、API Policy、Protocol Translation、Tenant。</p></div>
+      </div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">Reverse Proxy</span><div class="diagram">Client
+ ↓
+Reverse Proxy
+ ↓
+Backend</div><p>代表 Server 一侧，Client 通常不知道最终 Backend。</p></div>
+        <div class="grid-card"><span class="tag orange">Forward Proxy</span><div class="diagram">Client
+ ↓
+Forward Proxy
+ ↓
+Internet Server</div><p>更像代表 Client 出网。</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="client-ip">
+      <span class="eyebrow">原始客户端身份</span>
+      <h2>5. Proxy 之后，Backend 为什么经常看不到真实 Client TCP Peer？</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <div class="diagram">Client 1.2.3.4
       ↓
 Proxy 10.0.0.5
       ↓ new TCP connection
@@ -94,40 +198,40 @@ Backend 10.0.0.20
 
 Backend TCP Peer
 = 10.0.0.5</div>
-          <p>如果 Proxy 重建了 TCP Connection，后端看到 Proxy 是完全正常的。</p>
+          <p>因为 Backend 这一段连接的真实 TCP 对端就是 Proxy。</p>
         </div>
         <div class="grid-card">
-          <span class="tag blue">如何传递 Original Client 信息</span>
-          <div class="codebox">HTTP:
+          <span class="tag blue">传递 Original Client 元数据</span>
+          <div class="diagram">HTTP:
+Forwarded
 X-Forwarded-For
 X-Forwarded-Proto
 X-Forwarded-Host
-Forwarded
 
 L4:
 PROXY Protocol</div>
-          <p>X-Forwarded-* 属于 HTTP 层；PROXY Protocol 适合更通用的连接级代理。</p>
+          <p>HTTP Header 与通用连接级元数据属于不同层。</p>
         </div>
       </div>
-      <div class="callout"><div class="icon">!</div><div><strong>必须建立 Trusted Proxy Boundary</strong><div>Client 自己也能伪造 X-Forwarded-For。Edge / Gateway 需要清洗不可信头并按明确策略追加真实信息，Backend 只信任已知 Proxy。</div></div></div>
+      <div class="callout"><div class="icon">!</div><div><strong>必须建立 Trusted Proxy Boundary</strong><div>Client 可以自己伪造 X-Forwarded-For。可信 Edge 应清理/覆盖不可信头，再按确定规则追加地址；Backend 只信任明确的 Proxy 链。</div></div></div>
     </section>
 
     <section class="section" id="rpc">
-      <span class="eyebrow">从公网协议进入内部 RPC</span>
-      <h2>4. Gateway → Service Discovery → Load Balancing → RPC</h2>
+      <span class="eyebrow">进入内部服务网络</span>
+      <h2>6. Gateway → Service Discovery → Load Balancing → RPC</h2>
       <div class="grid-2">
         <div class="grid-card">
-          <span class="tag green">协议可以切换</span>
-          <div class="codebox">Browser → Gateway
+          <span class="tag green">协议切换</span>
+          <div class="diagram">Browser → Gateway
 HTTP/2 + JSON
 
 Gateway → Order Service
 gRPC + Protobuf</div>
-          <p>Gateway 既可以做 Auth / Rate Limit / Routing，也可以做 Protocol Translation。</p>
+          <p>Gateway 可以完成 Auth、Rate Limit、Routing、Aggregation 与 Protocol Translation。</p>
         </div>
         <div class="grid-card">
           <span class="tag purple">服务寻址</span>
-          <div class="codebox">inventory-service
+          <div class="diagram">inventory-service
       ↓ Discovery
 10.20.1.7:9000
 10.20.1.8:9000
@@ -135,21 +239,41 @@ gRPC + Protobuf</div>
       ↓ Load Balancing
 Pick 10.20.1.8
       ↓
+Connect / Reuse
+      ↓
 RPC</div>
-          <p>Discovery 回答“有哪些实例”；Load Balancing 回答“这次选哪个”。</p>
+          <p>Discovery 回答“有哪些实例”；Load Balancing 回答“这一次选哪个实例”。</p>
         </div>
       </div>
+      <div class="grid-3" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">Client-side LB</span><p>调用方直接获取 Endpoint Set，并自己选择目标。</p></div>
+        <div class="grid-card"><span class="tag orange">Server-side LB</span><p>调用方只连接稳定 VIP / Proxy，由中间层选择后端。</p></div>
+        <div class="grid-card"><span class="tag purple">Sidecar / Mesh</span><p>业务进程把 Discovery、LB、mTLS、Telemetry 等能力委托给本地 Sidecar。</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="connections">
+      <span class="eyebrow">一个业务请求会“裂变”</span>
+      <h2>7. 一次业务 Request，往往不是一条端到端 TCP Connection</h2>
+      <div class="diagram">Browser → CDN            Connection A
+CDN → Gateway            Connection B
+Gateway → Feed Service   Connection C
+Feed → User Service      Connection D
+Feed → Recommend Service Connection E
+Feed → Redis             Connection F
+Feed → MySQL             Connection G</div>
+      <div class="callout"><div class="icon">i</div><div><strong>这解释了为什么不同层看到的 “peer” 不一样</strong><div>每个代理 / 服务边界都可能结束上一条连接并建立下一条连接。一次业务调用链和一条 TCP Connection 是两个不同概念。</div></div></div>
     </section>
 
     <section class="section" id="pool">
       <span class="eyebrow">连接与时延</span>
-      <h2>5. Connection Pool、Deadline Budget、Retry Storm</h2>
+      <h2>8. Connection Pool、Deadline Budget、Retry Storm</h2>
       <div class="grid-2">
-        <div class="grid-card"><span class="tag blue">Connection Pool</span><div class="codebox">Service A
+        <div class="grid-card"><span class="tag blue">Connection Pool</span><div class="diagram">Service A
  ├─ Conn A → Service B1
  ├─ Conn B → Service B2
- └─ Conn C → Service B3</div><p>每次都 socket/connect/TLS/close 成本太高，因此服务间通常复用长期连接。</p></div>
-        <div class="grid-card"><span class="tag green">Deadline Budget</span><div class="codebox">User 1000ms
+ └─ Conn C → Service B3</div><p>每次都重新 connect / TLS / close 成本太高，长期连接与 Pool 是常见工程手段。</p></div>
+        <div class="grid-card"><span class="tag green">Deadline Budget</span><div class="diagram">User 1000ms
  ↓
 Gateway 900ms
  ↓
@@ -157,21 +281,21 @@ Service A 700ms
  ↓
 Service B 500ms
  ↓
-DB 300ms</div><p>下游预算比上游短，才能让上游留出失败处理和清理时间。</p></div>
+DB 300ms</div><p>下游预算小于上游预算，上游才有时间做错误处理与清理。</p></div>
       </div>
       <div class="grid-2" style="margin-top:14px">
-        <div class="grid-card"><span class="tag red">Retry Storm</span><p>系统变慢 → Timeout 增多 → 各层重试 → 流量放大 → 系统更慢。Retry 必须配合 Backoff、Jitter、Budget、幂等、熔断和 Load Shedding。</p></div>
-        <div class="grid-card"><span class="tag orange">连接生命周期</span><p>Keepalive、Idle Timeout、Max Connection Age、Drain 分别解决不同问题。Connection closed by peer 不一定意味着网络坏了。</p></div>
+        <div class="grid-card"><span class="tag red">Retry Storm（重试风暴）</span><p>系统变慢 → Timeout 增多 → 各层重试 → 流量放大 → 更慢。Retry 必须配合 Backoff、Jitter、Retry Budget 与 Idempotency。</p></div>
+        <div class="grid-card"><span class="tag orange">Circuit Breaker / Load Shedding</span><p>持续失败时快速失败或降级；容量不足时主动拒绝部分请求，保护剩余系统。</p></div>
       </div>
     </section>
 
     <section class="section" id="data">
       <span class="eyebrow">数据层也是网络</span>
-      <h2>6. Redis / MySQL：别把数据库访问想成本地函数调用</h2>
+      <h2>9. Redis / MySQL：别把数据库访问想成本地函数调用</h2>
       <div class="grid-2">
         <div class="grid-card">
           <span class="tag green">真实路径</span>
-          <div class="codebox">Application
+          <div class="diagram">Application
  ↓
 DB / Redis Driver
  ↓
@@ -184,106 +308,102 @@ IP
 Private Network
  ↓
 Redis / MySQL Server</div>
-          <p>所以数据库故障除了 SQL，还可能来自 connect/read timeout、Pool Exhaustion、reset、DNS、route 和 packet loss。</p>
+          <p>因此故障除了 SQL，还可能来自 Connect Timeout、Read Timeout、Pool Exhaustion、Reset、DNS、Route 与 Packet Loss。</p>
         </div>
         <div class="grid-card">
-          <span class="tag red">连接池也会成为瓶颈</span>
-          <div class="codebox">Pool Size fixed
- ↓
-Queries become slower
+          <span class="tag red">Pool 也会出故障</span>
+          <div class="diagram">Queries become slower
  ↓
 Connections occupied longer
  ↓
 Pool Exhausted
  ↓
 Wait / Timeout</div>
-          <p>表面上像“数据库突然慢”，根因可能是 SQL、Pool Size、Connection Leak 或上游并发变化。</p>
+          <p>根因可能是 SQL、Pool Size、Connection Leak、下游抖动或上游并发突然升高。</p>
         </div>
       </div>
     </section>
 
     <section class="section" id="ops">
-      <span class="eyebrow">运行治理</span>
-      <h2>7. Readiness、Liveness、Draining、mTLS、Service Mesh</h2>
+      <span class="eyebrow">运行与治理</span>
+      <h2>10. Health Check、Readiness、Liveness、Drain、mTLS、Service Mesh</h2>
       <div class="grid-4">
         <div class="grid-card"><span class="tag blue">Liveness</span><p>进程是否坏到应该重启。</p></div>
-        <div class="grid-card"><span class="tag green">Readiness</span><p>当前是否应该接新流量。可以 Alive but Not Ready。</p></div>
-        <div class="grid-card"><span class="tag orange">Connection Draining</span><p>停止接新请求，等待 in-flight 请求完成后再下线。</p></div>
-        <div class="grid-card"><span class="tag purple">mTLS / Mesh</span><p>Service-to-Service 双向身份、加密与流量治理。</p></div>
+        <div class="grid-card"><span class="tag green">Readiness</span><p>当前是否应该接收新流量。可以 Alive but Not Ready。</p></div>
+        <div class="grid-card"><span class="tag orange">Connection Draining</span><p>停止新请求，等待 in-flight 请求完成后再下线实例。</p></div>
+        <div class="grid-card"><span class="tag purple">mTLS</span><p>Service-to-Service 双向身份、加密与完整性保护。</p></div>
       </div>
       <div class="grid-2" style="margin-top:14px">
-        <div class="grid-card"><span class="tag blue">API Gateway</span><p>更偏 North-South：外部 Client → 内部系统。常做 Auth、Rate Limit、API Policy。</p></div>
-        <div class="grid-card"><span class="tag green">Service Mesh</span><p>更偏 East-West：Service ↔ Service。常做 mTLS、Discovery、Retry、Timeout、Telemetry。</p></div>
+        <div class="grid-card"><span class="tag blue">API Gateway · North-South</span><p>更偏外部 Client → 内部系统：Auth、Rate Limit、API Policy、Routing。</p></div>
+        <div class="grid-card"><span class="tag green">Service Mesh · East-West</span><p>更偏 Service ↔ Service：mTLS、Discovery、Retry、Timeout、Traffic Policy、Telemetry。</p></div>
       </div>
     </section>
 
     <section class="section" id="views">
-      <span class="eyebrow">三张图必须分开</span>
-      <h2>8. 角色图、协议图、身份图分别回答不同问题</h2>
+      <span class="eyebrow">三张图与调用链</span>
+      <h2>11. 角色图、协议图、身份图分别回答什么？</h2>
       <div class="grid-3">
-        <div class="grid-card"><span class="tag blue">角色图</span><div class="codebox">Browser
+        <div class="grid-card"><span class="tag blue">角色图</span><div class="diagram">Browser
  ↓
-Edge
- ↓
-LB / Gateway
- ↓
-Backend
- ↓
-Redis / MySQL</div><p>回答：谁在做事？</p></div>
-        <div class="grid-card"><span class="tag orange">协议图</span><div class="codebox">Browser → Edge
-HTTP/2+TLS+TCP
-or HTTP/3+QUIC+UDP
-
-Gateway → Backend
-gRPC / HTTP / Thrift</div><p>回答：每一段跑什么协议？</p></div>
-        <div class="grid-card"><span class="tag purple">身份图</span><div class="codebox">DNS Name
-TLS Identity
-TCP Peer
-Original Client IP
-Application User
-Service Identity
-Trace ID</div><p>回答：“你是谁”在每一层分别怎么定义？</p></div>
-      </div>
-      <div class="callout"><div class="icon">∞</div><div><strong>Trace ID ≠ TCP Connection ≠ QUIC Connection ID</strong><div>一次 Trace 可以跨多个服务、多个请求和多条底层连接。</div></div></div>
-    </section>
-
-    <section class="section" id="troubleshoot">
-      <span class="eyebrow">分层排障</span>
-      <h2>9. 遇到“访问超时”，不要直接跳数据库</h2>
-      <div class="grid-2">
-        <div class="grid-card">
-          <span class="tag blue">统一排障链</span>
-          <div class="codebox">DNS
- ↓
-CDN / Edge
- ↓
-TCP / QUIC
- ↓
-TLS
- ↓
-WAF
- ↓
-LB
+Edge / Proxy
  ↓
 Gateway
  ↓
 Backend
  ↓
-RPC
+Redis / MySQL</div><p>回答：谁在做事？</p></div>
+        <div class="grid-card"><span class="tag orange">协议图</span><div class="diagram">Browser → Edge
+HTTP/2+TLS+TCP
+or HTTP/3+QUIC+UDP
+
+Gateway → Backend
+gRPC / HTTP / Thrift</div><p>回答：每一段跑什么协议？</p></div>
+        <div class="grid-card"><span class="tag purple">身份图</span><div class="diagram">DNS Name
+TLS Identity
+TCP Peer
+Original Client IP
+Application User
+Service Identity
+Trace ID</div><p>回答：“你是谁”在不同层怎么定义？</p></div>
+      </div>
+      <div class="callout"><div class="icon">∞</div><div><strong>Trace ID ≠ TCP Connection ≠ QUIC Connection ID</strong><div>Trace / Span 是分布式业务调用链标识；一条 Trace 完全可以横跨很多连接和很多服务。</div></div></div>
+    </section>
+
+    <section class="section" id="troubleshoot">
+      <span class="eyebrow">分层排障</span>
+      <h2>12. 遇到“访问超时”，不要直接跳到数据库</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag blue">统一排障链</span>
+          <div class="diagram">DNS
+ ↓
+Edge / CDN
+ ↓
+TCP / QUIC
+ ↓
+TLS
+ ↓
+WAF / LB
+ ↓
+Gateway
+ ↓
+Backend
+ ↓
+RPC Dependency
  ↓
 Redis / DB</div>
           <p>逐段问：有没有到？有没有建连？有没有握手？有没有被拒？有没有排队？有没有超时？有没有重试？</p>
         </div>
         <div class="grid-card">
           <span class="tag red">两个典型误判</span>
-          <div class="codebox">IP + port 能通
+          <div class="diagram">IP + port 能通
 ≠
 hostname 完整链路一定正常
 
 ping 能通
 ≠
 TCP 443 / TLS / HTTP 一定正常</div>
-          <p>域名链路还涉及 DNS、IPv4/IPv6、SNI、Certificate、Host / :authority、WAF 和 Gateway Routing。</p>
+          <p>域名链路还涉及 DNS、IPv4/IPv6、SNI、Certificate、Host/:authority、WAF 与 Gateway Routing。</p>
         </div>
       </div>
       <table style="margin-top:14px">
@@ -297,26 +417,26 @@ TCP 443 / TLS / HTTP 一定正常</div>
     </section>
 
     <section class="summary" id="summary">
-      <h2>10. 一页总结：真实生产网络的核心不是“协议多”，而是“边界多”</h2>
-      <div class="codebox">Browser
- ↓ DNS
-CDN / Edge
+      <h2>13. 全课程收束：真实生产网络的核心不是“协议多”，而是“边界多”</h2>
+      <div class="diagram">Client
+ ↓ Internet
+Public Edge / Entry
+ ├─ CDN / Cache
+ ├─ WAF
+ ├─ L4/L7 LB
+ └─ TLS Termination or Passthrough
  ↓
-WAF
+Gateway / Proxy
+ ├─ Auth
+ ├─ Rate Limit
+ ├─ Routing
+ └─ Protocol Translation
  ↓
-L4 / L7 LB
- ↓
-TLS Termination / Passthrough
- ↓
-Nginx / Envoy / API Gateway
- ↓
-Backend Service
- ↓
-Service Discovery
- ↓
-Load Balancing
- ↓
-RPC
+Backend Services
+ ├─ Discovery
+ ├─ Load Balancing
+ ├─ RPC
+ └─ mTLS
  ↓
 Redis / MySQL / MQ
 
@@ -327,27 +447,7 @@ Redis / MySQL / MQ
 角色图
 ≠ 协议图
 ≠ 身份图</div>
-      <div class="grid-2" style="margin-top:18px">
-        <div>
-          <h3>最该记住的 6 句话</h3>
-          <ol class="checklist">
-            <li>DNS IP 常是入口，而不是最终业务实例。</li>
-            <li>L4 按连接，L7 按请求。</li>
-            <li>TLS 终止点决定谁能看到 HTTP 内容。</li>
-            <li>Proxy 后 Backend 的 TCP Peer 常不是原始 Client。</li>
-            <li>Discovery 与 Load Balancing 是两个步骤。</li>
-            <li>数据库访问仍然是网络 I/O。</li>
-          </ol>
-        </div>
-        <div>
-          <h3>整套课程到这里已经形成完整闭环</h3>
-          <div class="pill-list">
-            <span class="pill">URL / DNS</span><span class="pill">OS / Packet</span><span class="pill">IP / NAT</span>
-            <span class="pill">TCP / UDP</span><span class="pill">HTTP / TLS</span><span class="pill">QUIC / RPC</span>
-            <span class="pill">Backend Topology</span>
-          </div>
-        </div>
-      </div>
+      <div class="chapter-nav"><a href="./06-modern-protocols.html">← 06 · 现代协议</a><a href="./index.html">回到课程首页 →</a></div>
     </section>
   </main>
 </div>
