@@ -122,8 +122,8 @@ IP
 2. [网络分层、封装与 OS 收发包](./02-network-model-and-packets.md) · [HTML 视觉版](./02-network-model-and-packets.html)  
    网络分层、封装/解封装、用户态 → 内核 → 驱动 → 网卡、MTU/MSS。
 
-3. 03-ip-routing-arp-nat.md  
-   IPv4/IPv6、CIDR、路由、ARP/NDP、DHCP、ICMP、NAT。
+3. [IP、CIDR、Route、ARP/NDP、ICMP、NAT](./03-ip-routing-arp-nat.md) · [HTML 视觉版](./03-ip-routing-arp-nat.html)  
+   IPv4/IPv6、CIDR、最长前缀匹配、ARP/NDP、ICMP、ping/traceroute、SNAT/DNAT/PAT、Conntrack、CGNAT。
 
 4. 04-tcp-udp.md  
    四元组、三次握手、四次挥手、重传、窗口、拥塞、队列、故障场景。
