@@ -146,7 +146,11 @@ IP Header
 IP Packet ≤ Path / Link MTU
    ↓
 L2 Frame</div>
-      <div class="callout"><div class="icon">!</div><div><strong>为什么更希望 TCP 分段，而不是依赖 IP Fragmentation？</strong><div>因为 Fragmentation 增加中间网络复杂度与丢片风险，现代网络更倾向通过 MSS / PMTU Discovery 在发送端控制合适大小。</div></div></div>
+      <div class="callout"><div class="icon">!</div><div><strong>为什么更希望发送端控制大小，而不是依赖 IP Fragmentation？</strong><div>IPv4 允许路由路径中的 Fragmentation（受 DF 等条件影响），但分片会增加重组成本和丢片风险；IPv6 路由器不会像 IPv4 那样替转发流量做分片。现代协议更依赖 MSS 与 Path MTU Discovery，在端系统尽量选择合适大小。</div></div></div>
+      <div class="grid-2" style="margin-top:14px">
+        <div class="grid-card"><span class="tag blue">Path MTU Discovery</span><p>真正限制端到端路径的不是“本机网卡 MTU”单独一个值，而是整条路径上可承载的最小有效 MTU。PMTU Discovery 用网络反馈帮助端系统避免发送过大的 Packet。</p></div>
+        <div class="grid-card"><span class="tag orange">实现差异</span><p><code>sk_buff</code>、NAPI、qdisc 是 Linux 语境中的常见实现细节；Windows 也有对应的内核网络栈、驱动、队列与 Offload，但对象名称和内部路径并不相同。</p></div>
+      </div>
     </section>
 
     <section class="section" id="route">
