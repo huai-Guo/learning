@@ -1,362 +1,417 @@
-# MySQL 情景化学习：从短视频到 Agent
+# MySQL 情景化学习：先学数据库设计，再学底层机制
 
-> 目标不是学会 `SELECT / INSERT / UPDATE`，而是建立一种能力：
+> 目标不是“会写 SQL”，而是：
 >
-> **看到一个真实业务需求时，知道哪些状态应该放 MySQL、表应该怎么拆、索引为什么这样建、事务边界在哪里、并发时会发生什么、系统规模扩大后应该怎么演化。**
+> **拿到一个真实业务需求，能自己从 0 推导出数据库边界、实体关系、表、字段、主键、唯一约束、索引、事务、并发策略、失败恢复与扩展方案。**
 
-这套内容默认使用 **MySQL 8.4 + InnoDB** 作为讨论基线。
+这套内容默认以 MySQL 8.4 + InnoDB 为讨论基线。
 
 ---
 
-# 0. 为什么不从“语法大全”开始
+# 0. 这套课现在的核心已经改变
 
-MySQL 的基础语法并不难。
-
-真正难的是这些问题：
+不是：
 
 ~~~text
-用户点了一次赞
-    ↓
-到底写哪张表？
-    ↓
-为什么不是直接 UPDATE video SET like_count = like_count + 1？
-    ↓
-重复请求怎么办？
-    ↓
-Redis 和 MySQL 谁是真相？
-    ↓
-两个请求同时到达会不会重复点赞？
-    ↓
-事务该包多大？
-    ↓
-为什么一个索引顺序写反，锁范围和性能都会变？
+SELECT
+INSERT
+索引
+事务
+MVCC
+redo
+binlog
 ~~~
 
-或者 Agent：
+从概念往业务里硬套。
+
+而是：
 
 ~~~text
-用户发出一条 Prompt
-    ↓
-Session / Turn / Message / Run / Step 到底怎么存？
-    ↓
-Tool Call 已经调用外部系统，但数据库提交失败怎么办？
-    ↓
-Agent 崩溃后如何 resume？
-    ↓
-多个 Worker 抢任务怎样避免重复执行？
-    ↓
-Token Usage 是 UPDATE 一个总数，还是记录一笔笔事实？
-~~~
-
-这些才是工程里真正使用 MySQL 的地方。
-
----
-
-# 1. 整个课程的两条母线
-
-## 母线 A：短视频系统
-
-从用户打开 App 开始：
-
-~~~mermaid
-flowchart LR
-    A["用户打开首页"] --> B["推荐系统返回 video_id 列表"]
-    B --> C["内容服务批量取视频元数据"]
-    C --> D["前端展示 20 个视频"]
-    D --> E["点赞 / 收藏 / 评论 / 关注"]
-    E --> F["MySQL 持久化关系与事实"]
-    E --> G["Redis 承担热点状态 / 计数"]
-    F --> H["Binlog / Outbox / MQ"]
-    H --> I["异步统计、推荐特征、数据仓库"]
-~~~
-
-你会看到 MySQL 在不同位置承担完全不同的职责：
-
-| 场景 | MySQL 更适合保存什么 | 不应该硬让 MySQL 做什么 |
-|---|---|---|
-| 视频基础信息 | 标题、作者、审核状态、发布时间 | 每次推荐都全表排序 |
-| 点赞关系 | “用户 X 是否赞过视频 Y”的持久事实 | 热门视频每次点赞都争抢同一 count 行 |
-| 评论 | 评论正文、父子关系、审核状态 | 用 OFFSET 100000 做深翻页 |
-| 收藏 | 用户与视频的关系事实 | 把所有用户收藏塞进一个 JSON |
-| 发布状态 | 草稿→审核→发布→下架的状态机 | 让多个服务无条件覆盖状态 |
-| 统计 | 可恢复的事实或聚合结果 | 把高 QPS 实时计数全部压在单行 UPDATE |
-
----
-
-## 母线 B：Agent 系统
-
-从用户发出 Prompt 开始：
-
-~~~mermaid
-flowchart LR
-    U["User Prompt"] --> S["Session / Turn"]
-    S --> R["Run"]
-    R --> P["Planner / Agent Loop"]
-    P --> T["Tool Call"]
-    T --> X["External System"]
-    T --> DB["MySQL: tool_call / run_step"]
-    P --> C["Checkpoint"]
-    C --> DB
-    R --> Q["Usage / Billing Ledger"]
-    Q --> DB
-    DB --> O["Outbox / CDC"]
-    O --> W["Async Workers / Analytics"]
-~~~
-
-Agent 场景里 MySQL 常见职责是：
-
-- 保存 **Agent 定义与版本**；
-- 保存 **Session / Turn / Message 元数据**；
-- 保存 **Run / Step / Tool Call 执行状态**；
-- 保存 **Checkpoint 与 resume 指针**；
-- 保存 **幂等键、配额、状态机版本号**；
-- 保存 **Token / Cost 使用流水**；
-- 保存 **Outbox Event**，把事务内事实可靠地交给异步系统。
-
-但大段模型上下文、附件、超大 Tool Result 往往更适合对象存储，MySQL 保存索引、摘要、状态和引用。
-
----
-
-# 2. 阅读顺序
-
-| 顺序 | 章节 | 真实问题 |
-|---|---|---|
-| 1 | [短视频：点赞、评论、发布与热点数据](./01-short-video-scenes.md) | MySQL 在高并发内容业务里到底放什么、怎么查、怎么写 |
-| 2 | [Agent：Session、Run、Tool Call、Resume 与配额](./02-agent-scenes.md) | Agent 为什么需要关系数据库，执行状态怎么持久化 |
-| 3 | [从场景反推 InnoDB：索引、MVCC、锁与事务](./03-innodb-from-scenes.md) | 为什么这些 SQL 会快、会阻塞、会死锁 |
-| 4 | [从一次 COMMIT 到宕机恢复：redo、undo、binlog 与 Outbox](./04-commit-and-consistency.md) | 数据究竟什么时候算“写成功” |
-| 5 | [规模上来以后：慢查询、热点、读写分离、分库分表](./05-scaling-and-operations.md) | 单机 MySQL 什么时候不够，应该先优化什么 |
-| - | [参考资料](./SOURCES.md) | MySQL 官方文档与进一步阅读 |
-
----
-
-# 3. 学习时永远先问这 7 个问题
-
-以后看到一张表，不要先背字段。
-
-先问：
-
-~~~text
-① 这张表保存的是“事实”、 “当前状态”还是“缓存”？
-② 谁写它？谁读它？
-③ 最常见的查询条件是什么？
-④ 最常见的排序是什么？
-⑤ 哪些字段需要唯一约束来兜底？
-⑥ 两个请求同时修改时，谁赢？
-⑦ 数据量增长 1000 倍后，哪一步最先坏？
-~~~
-
-这七个问题基本会自然推出：
-
-~~~text
-表结构
-  ↓
-主键
-  ↓
-唯一索引
-  ↓
-联合索引
-  ↓
+产品需求
+↓
+Use Case / Command
+↓
+Query
+↓
+业务不变量
+↓
+领域对象与关系
+↓
+数据库边界
+↓
+表设计
+↓
+主键 / UNIQUE / 字段
+↓
+索引
+↓
 事务边界
-  ↓
-锁
-  ↓
-缓存 / MQ / 分片
+↓
+并发
+↓
+失败与恢复
+↓
+数据生命周期
+↓
+容量与扩展
+↓
+最后反推 InnoDB 为什么这样工作
 ~~~
+
+所以本专题最重要的是前 3 章，而不是先去背 B+Tree。
 
 ---
 
-# 4. 一个最重要的认知：MySQL 不是“整个系统”
-
-以点赞为例。
-
-错误心智模型：
-
-~~~text
-用户点赞
-   ↓
-MySQL
-   ↓
-结束
-~~~
-
-真实系统更像：
+# 1. 第一张总图：数据库设计到底在设计什么
 
 ~~~mermaid
 flowchart LR
-    A["App"] --> B["Like API"]
-    B --> C["幂等 / 权限校验"]
-    C --> D["MySQL: 点赞关系事实"]
-    C --> E["Redis: 热点状态 / 计数"]
-    D --> F["Outbox / Binlog"]
-    F --> G["MQ"]
-    G --> H["统计 / 推荐 / 风控 / 数仓"]
+    R["业务需求"] --> U["Use Cases"]
+    U --> Q["Query Matrix"]
+    U --> I["Invariant Matrix"]
+    Q --> D["Domain Model"]
+    I --> D
+    D --> B["Database Boundary"]
+    B --> T["Tables"]
+    T --> K["Keys / Constraints"]
+    Q --> X["Indexes"]
+    I --> TX["Transactions / Locks"]
+    T --> L["Lifecycle"]
+    L --> C["Capacity"]
+    C --> S["Scaling"]
 ~~~
 
-MySQL 很重要，但它通常负责：
+真正优秀的 DDL 应该能解释：
 
-> **长期、可恢复、需要约束、需要事务的核心事实。**
-
-而不是承担所有毫秒级高频读取、所有热点计数、所有全文检索、所有分析查询。
-
-Agent 也是一样。
+> 每张表为什么存在？每个字段属于哪个生命周期？每个索引对应哪条查询？每个 UNIQUE 保护哪个业务规则？
 
 ---
 
-# 5. 为什么课程会反复出现“事实表”和“状态表”
+# 2. 课程的四张核心设计表
 
-例如点赞：
+以后设计任何数据库，都先写这四张表。
+
+## Query Matrix
 
 ~~~text
+谁查？
+WHERE 是什么？
+ORDER BY 是什么？
+返回多少？
+调用频率多少？
+~~~
+
+用于反推索引和读模型。
+
+## Invariant Matrix
+
+~~~text
+哪些规则任何时候都不能被破坏？
+~~~
+
+用于反推：
+
+- PRIMARY KEY；
+- UNIQUE；
+- NOT NULL；
+- CHECK；
+- 条件 UPDATE；
+- Lock；
+- Transaction。
+
+## Mutation Matrix
+
+~~~text
+一次写操作改哪些表？
+哪些修改必须一起成功？
+哪些步骤是远程副作用？
+~~~
+
+用于反推事务边界和状态机。
+
+## Failure Matrix
+
+~~~text
+如果任何一步宕机，数据库是什么状态？
+外部世界是什么状态？
+如何重试、对账、补偿？
+~~~
+
+用于反推：
+
+- 幂等；
+- Outbox；
+- Lease；
+- Checkpoint；
+- Reconciliation。
+
+---
+
+# 3. 两条真实业务母线
+
+## 短视频
+
+不是只讲点赞。
+
+会完整覆盖：
+
+~~~text
+视频上传
+↓
+分片上传
+↓
+对象存储
+↓
+转码
+↓
+草稿
+↓
+版本
+↓
+机器/人工审核
+↓
+定时发布
+↓
+Feed 元数据
+↓
+点赞
+↓
+收藏夹
+↓
+评论/回复
+↓
+关注
+↓
+举报
+↓
+热点计数
+↓
+曝光/播放行为
+↓
+CDC / 推荐 / 搜索 / OLAP
+~~~
+
+重点是看这些场景为什么不能共用一张万能 video 表。
+
+## Agent
+
+也不是只讲 Session 和 Run。
+
+会覆盖：
+
+~~~text
+Agent Definition / Version
+↓
+多人 Session
+↓
+Turn / Retry
+↓
+Run / Step
+↓
+Task / Lease
+↓
+Tool Call
+↓
+高风险 Tool Approval
+↓
+UNKNOWN 外部状态
+↓
+Checkpoint / Resume
+↓
+定时 Agent
+↓
+Agent 创建配额
+↓
+Run 并发配额
+↓
+月度 Token 配额
+↓
+Usage Ledger
+↓
+Billing / Audit
+~~~
+
+重点是学习如何持久化一个长时间、会失败、有外部副作用的状态机。
+
+---
+
+# 4. 推荐阅读顺序
+
+| 顺序 | 章节 | 核心问题 |
+|---|---|---|
+| 1 | [00｜从业务需求设计数据库与表](./00-database-table-design.md) | 一张表到底应该怎么从 0 设计出来 |
+| 2 | [01｜短视频：从产品需求一步步设计数据库](./01-short-video-scenes.md) | 视频、版本、资产、审核、发布、点赞、收藏、评论、关注如何拆表 |
+| 3 | [02｜Agent：从产品需求一步步设计数据库](./02-agent-scenes.md) | Agent、Session、Run、Tool、Checkpoint、Quota、Billing 如何持久化 |
+| 4 | [03｜从场景反推 InnoDB](./03-innodb-from-scenes.md) | 为什么这些索引、锁、MVCC 设计能工作 |
+| 5 | [04｜从 COMMIT 到宕机恢复](./04-commit-and-consistency.md) | redo、undo、binlog、WAL、Group Commit、Outbox |
+| 6 | [05｜规模上来以后](./05-scaling-and-operations.md) | 慢查询、热点、Replica、Partition、Shard、Online DDL |
+| 7 | [06｜复杂设计案例库](./06-complex-design-casebook.md) | 评论、关注、上传、审批、定时任务、月度配额等综合案例 |
+| - | [参考资料](./SOURCES.md) | MySQL 8.4 官方文档与工程模式说明 |
+
+---
+
+# 5. 00 章必须掌握什么
+
+看完 00 章，你应该能回答：
+
+~~~text
+为什么 video 和 video_revision 应该拆开？
+为什么审核记录不应该只是 video.review_status？
+为什么业务 UNIQUE 和 surrogate primary key 可以同时存在？
+什么时候多对多关系应该建中间表？
+NULL、空串、0 有什么业务差异？
+status 为什么会状态爆炸？
+怎么从 Query Matrix 推导联合索引？
+怎么从 Invariant Matrix 推导事务和锁？
+什么时候 FK 合理，什么时候应该放在服务边界外？
+什么时候 JSON 合理，什么时候应该升格成正式列？
+软删除到底涉及哪些生命周期问题？
+容量估算为什么也是表设计的一部分？
+~~~
+
+这些比背“最左前缀原则”更早、更核心。
+
+---
+
+# 6. 短视频章节现在重点看什么
+
+先看这组拆分：
+
+~~~text
+video
+= 长期身份
+
+video_revision
+= 内容版本
+
+video_asset
+= 文件与转码资产
+
+moderation_task
+= 每次审核尝试
+
+publish_job
+= 可失败、可重试的发布任务
+
 video_like
-(user_id, video_id, created_at)
+= 点赞关系事实
+
+video_favorite
+= 收藏关系
+
+favorite_folder
+= 收藏容器
+
+comment
+= 评论事实
+
+user_follow
+= 社交边
 ~~~
 
-这是一条关系事实：
+然后再看索引、事务和热点。
 
-> 用户 10086 点赞了视频 9001。
+核心不是“这些表名要照抄”。
 
-而：
+而是理解：
 
-~~~text
-video.like_count = 18273645
-~~~
-
-是一个聚合状态。
-
-它可以由大量事实推导得到。
-
-同样 Agent：
-
-~~~text
-usage_ledger
-(run_id, model, input_tokens, output_tokens, cost)
-~~~
-
-是使用事实。
-
-~~~text
-user_usage_daily.total_tokens
-~~~
-
-是聚合状态。
-
-工程上常见原则：
-
-> **事实尽量可追溯，聚合可以重建。**
-
-这也是为什么很多复杂系统最终会自然引出：
-
-- Binlog / CDC
-- Outbox Pattern
-- Event / Ledger
-- 异步投影
-- Redis / OLAP
+> 为什么它们具有不同生命周期，所以值得拆成不同表。
 
 ---
 
-# 6. 这套课程会重点深挖哪些 MySQL 核心
+# 7. Agent 章节现在重点看什么
 
-不是为了背八股，而是让它们和业务问题绑定：
+先区分：
 
-### 索引
+~~~text
+Agent Definition
+≠ Agent Version
 
-从：
+Session
+≠ Turn
+≠ Run
 
-> “我要查某用户最近点赞的 20 个视频”
+Run Step
+≠ Tool Call
 
-推导：
+Tool Call
+≠ Tool Approval
 
-~~~sql
-KEY idx_user_created (user_id, created_at DESC, video_id)
+Quota
+≠ Usage Ledger
+
+Schedule
+≠ Scheduled Occurrence
+≠ Run
 ~~~
 
-再解释：
+例如：
 
-- 为什么 `user_id` 在前；
-- 为什么 `created_at` 在后；
-- 为什么还带 `video_id`；
-- 什么是最左前缀；
-- 什么是覆盖索引；
-- 为什么二级索引里还隐含主键；
-- 为什么索引越多写入越贵。
+~~~text
+Turn T18
+├─ Run R1 失败
+├─ Run R2 用户 Retry
+└─ Run R3 Resume
+~~~
 
-### 事务与锁
-
-从：
-
-> “用户只能创建最多 9 个 Agent”
-
-推导：
-
-- 为什么先查再插会超卖；
-- `SELECT ... FOR UPDATE` 锁的是谁；
-- 为什么没有合适索引时锁范围会变大；
-- 为什么事务里不要做模型调用；
-- 什么叫死锁；
-- 为什么所有代码按相同顺序加锁能减少死锁。
-
-### MVCC
-
-从：
-
-> “一个长事务为什么让线上库越来越胖？”
-
-推导：
-
-- Read View；
-- undo log；
-- 旧版本链；
-- Purge；
-- REPEATABLE READ 与 READ COMMITTED。
-
-### redo / undo / binlog
-
-从：
-
-> “COMMIT 返回成功以后突然断电，数据为什么还能回来？”
-
-推导：
-
-- buffer pool；
-- WAL；
-- redo；
-- undo；
-- binlog；
-- crash recovery；
-- replication；
-- Outbox。
+这就是为什么不能把“聊天消息 + 执行状态”都压进 message 表。
 
 ---
 
-# 7. 课程的最终目标
+# 8. 为什么后面还要学 InnoDB
 
-学完以后，你应该能够面对一个新需求，例如：
-
-> “支持 Agent 定时任务，每个用户最多运行 5 个并发任务，Worker 可以水平扩容，任务失败后可恢复，外部 Tool 不能重复扣款。”
-
-然后自己推导出：
+设计完成后，我们再追问：
 
 ~~~text
-task 表怎么建
-↓
-状态机怎么定义
-↓
-唯一键 / 幂等键放哪里
-↓
-Worker 怎么抢任务
-↓
-哪里用 FOR UPDATE / SKIP LOCKED
-↓
-事务边界在哪里
-↓
-Tool 外部副作用如何与 DB 状态协调
-↓
-如何做 checkpoint
-↓
-如何做 usage ledger
-↓
-如何异步投影统计
+为什么 PRIMARY KEY 会影响整张表的物理组织？
+为什么二级索引携带主键？
+为什么联合索引顺序会影响过滤和排序？
+为什么 FOR UPDATE 的锁范围和索引有关？
+为什么普通 SELECT 可以读旧版本？
+为什么长事务影响 undo purge？
+为什么 COMMIT 返回后断电还能恢复？
 ~~~
 
-到这一步，你学到的才不是“MySQL 语法”，而是 **数据库工程能力**。
+这时 B+Tree、MVCC、Lock、Redo 就不再是八股，而是在解释前面真实设计为什么有效。
+
+---
+
+# 9. 最终目标：面对陌生业务也能自己设计
+
+例如突然给你需求：
+
+> 企业 Agent 平台支持多人协作、每天定时运行、高风险 Tool 人工审批、Run 可恢复、每租户每月 1 亿 Token、历史审计保留 180 天。
+
+你应该能自己推导：
+
+~~~text
+先列 Use Case
+↓
+Query Matrix
+↓
+Invariant Matrix
+↓
+实体 / 生命周期
+↓
+Database Boundary
+↓
+Table Schema
+↓
+Unique Constraints
+↓
+Indexes
+↓
+Mutation Matrix
+↓
+Transaction
+↓
+Retry / Idempotency
+↓
+Failure Matrix
+↓
+Data Lifecycle
+↓
+Capacity / Sharding
+~~~
+
+到这一步，才算真正具备 MySQL / OLTP 数据库工程能力。
