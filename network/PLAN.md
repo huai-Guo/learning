@@ -265,6 +265,30 @@ Route
 
 # 7. Phase 5｜HTTP / HTTPS / TLS
 
+状态：**第一版已完成并落库**
+
+- [x] Markdown 正文：05-http-https-tls.md
+- [x] HTML 视觉版：05-http-https-tls.html
+- [x] HTTP Request / Response / Method / Status / Header / Body
+- [x] Safe / Idempotent / GET vs POST 语义
+- [x] Host / SNI / :authority 的协议层边界
+- [x] HTTP/1.1 Message Framing / Content-Length / Chunked
+- [x] Cookie / Session / Secure / HttpOnly / SameSite
+- [x] Cache-Control / ETag / 304
+- [x] HTTP persistent connection 与 TCP Keepalive 区分
+- [x] Symmetric / Public-key / Hash / Digital Signature / AEAD
+- [x] ECDHE ephemeral key 与 Certificate identity key 分离
+- [x] HKDF / Forward Secrecy
+- [x] CA 事前签发 vs TLS 运行时两时间轴
+- [x] Root / Intermediate / Leaf / Trust Store
+- [x] Certificate Signature vs CertificateVerify
+- [x] TLS 1.3 ClientHello / ServerHello / EncryptedExtensions / Finished
+- [x] TLS 1.2 vs TLS 1.3
+- [x] PSK / Session Resumption / 0-RTT / Replay Risk
+- [x] CRL / OCSP / OCSP Stapling
+- [x] ECH 入门与 HTTPS metadata 边界
+- [x] Browser DevTools / curl / OpenSSL / Wireshark 实验
+
 文件：05-http-https-tls.md
 
 HTTP：
