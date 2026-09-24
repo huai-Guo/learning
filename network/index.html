@@ -1,193 +1,185 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>计算机网络扫盲 · Visual Map</title>
-<style>
-:root{
-  --bg:#f4f8fc;--card:#fff;--ink:#0d2344;--muted:#5c728f;--line:#d7e3f1;
-  --blue:#2c67f2;--blueBg:#edf4ff;--green:#168b55;--greenBg:#edf9f2;
-  --orange:#c76414;--orangeBg:#fff4e9;--purple:#7148d8;--purpleBg:#f4f0ff;
-  --dark:#10192e
-}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:linear-gradient(180deg,#eef5fb 0,#f8fafc 44%,#fff 100%);font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--ink)}
-main{max-width:1220px;margin:0 auto;padding:28px 22px 90px}
-.hero,.panel{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:28px;box-shadow:0 18px 55px rgba(35,69,110,.08)}
-.hero{padding:34px}
-h1{font-size:42px;line-height:1.18;margin:0 0 12px;letter-spacing:-.5px}
-h2{font-size:29px;margin:44px 0 18px}
-h3{margin:0 0 12px;font-size:18px}
-p{line-height:1.75}
-.sub{font-size:18px;color:var(--muted);max-width:930px}
-.notice{margin-top:22px;padding:16px 18px;background:var(--dark);color:#fff;border-radius:16px;line-height:1.7}
-.nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
-.nav a{display:inline-block;padding:10px 13px;border-radius:12px;border:1px solid #bfd0e4;background:#fff;color:#2059cd;text-decoration:none;font-weight:600}
-.pre{display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:12px}
-.kpi{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:17px}
-.kpi small{display:block;color:var(--muted);margin-bottom:6px}.kpi strong{font-size:19px}
-.flow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
-.lane{border:1px solid var(--line);border-radius:20px;padding:15px;background:var(--card)}
-.step{padding:11px 12px;border-radius:13px;margin:9px 0;border:1px solid #dce5f0;background:#fbfdff;font-size:13.5px;line-height:1.45}
-.blue{background:var(--blueBg)}.green{background:var(--greenBg)}.orange{background:var(--orangeBg)}.purple{background:var(--purpleBg)}
-.arrow{text-align:center;color:var(--blue);font-weight:900}
-.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:19px}
-.card b{display:block;margin-bottom:7px}.card p{margin:0;color:var(--muted);font-size:14px}
-.timeline{display:grid;grid-template-columns:1fr 80px 1fr;align-items:start;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:22px}
-.col .msg{border:1px solid var(--line);border-radius:14px;padding:11px 13px;margin:10px 0;background:#fff;font-size:14px;line-height:1.5}
-.mid{text-align:center;color:var(--muted);font-size:13px;padding-top:15px}.mid div{margin:24px 0}
-.branch{display:grid;grid-template-columns:1fr 1fr;gap:14px}.branch .card{min-height:175px}
-.tag{display:inline-block;font-size:12px;padding:4px 8px;border-radius:999px;background:#eaf2ff;color:#235ccf;margin-bottom:8px}
-footer{margin-top:38px;color:var(--muted);font-size:13px;text-align:center}
-@media(max-width:900px){.flow,.grid,.pre,.branch{grid-template-columns:1fr}.timeline{grid-template-columns:1fr}.mid{display:none}h1{font-size:32px}}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>计算机网络扫盲 · Visual Course</title>
+  <link rel="stylesheet" href="./assets/course.css">
 </head>
 <body>
-<main>
-<section class="hero">
-  <div class="tag">network-beginner-roadmap</div>
-  <h1>计算机网络扫盲 · Visual Map</h1>
-  <p class="sub">从“电脑刚连上网络”开始，沿着一条真实 HTTPS 请求，看到 DNS、Socket、TCP、Route、ARP/NDP、NAT/PAT、TLS 和 HTTP 分别属于谁、为什么存在、前后如何衔接。</p>
-  <div class="notice"><b>主线假设：</b>先讲 HTTP/1.1 或 HTTP/2 over TCP + TLS 1.3。HTTP/3 使用 QUIC/UDP，后续单独展开。这里的示例公网 IP 使用 TEST-NET 文档地址，不代表真实网站。</div>
-  <div class="nav">
-    <a href="./README.md">Markdown 总入口</a>
-    <a href="./00-network-bootstrap.md">00 · 入网前置</a>
-    <a href="./01-url-to-webpage.md">01 · URL 到网页</a>
-    <a href="./PLAN.md">建设计划</a>
-    <a href="./SOURCES.md">参考资料</a>
-  </div>
-</section>
+<div class="page">
+  <aside class="toc">
+    <h2>Network Visual Course</h2>
+    <p>整套课程只围绕一条主线：一条真实请求从 Browser 出发，穿过 OS、Router、Internet、TLS 和后端服务。</p>
+    <a href="#hero">课程首页</a>
+    <a href="#route">学习路线</a>
+    <a href="#chapters">章节导航</a>
+    <a href="#principles">阅读原则</a>
+    <a href="#master">总母图</a>
+  </aside>
 
-<h2>0 · URL 之前：电脑先获得网络参数</h2>
-<div class="pre">
-  <div class="kpi"><small>DHCP / 静态配置</small><strong>192.168.1.20</strong><p>“我在这个网络里是谁？”</p></div>
-  <div class="kpi"><small>Subnet</small><strong>192.168.1.0/24</strong><p>“谁和我属于同一直接网络？”</p></div>
-  <div class="kpi"><small>Default Gateway</small><strong>192.168.1.1</strong><p>“去外网第一跳交给谁？”</p></div>
-  <div class="kpi"><small>DNS Server</small><strong>Resolver</strong><p>“域名问题先问谁？”</p></div>
+  <main class="content">
+    <section class="hero" id="hero">
+      <span class="badge">Computer Networking · Beginner → Backend</span>
+      <h1>计算机网络扫盲：<br>从“输入一个 URL”开始，真正看懂网络</h1>
+      <p class="lead">这不是一套“背 OSI 七层”的课。整套内容围绕一条真实 HTTPS 请求展开：<b>URL → DNS → Socket → TCP → Route → ARP/NDP → NAT/PAT → Internet → TLS → HTTP → Gateway → RPC → Redis/MySQL</b>。</p>
+      <div class="hero-grid">
+        <div class="mini-card">
+          <h3>适合谁</h3>
+          <ul>
+            <li>第一次系统学习计算机网络的人。</li>
+            <li>后端开发希望把八股、抓包、真实架构串起来的人。</li>
+            <li>面试前需要用“因果链”而不是孤立题目复盘的人。</li>
+          </ul>
+        </div>
+        <div class="mini-card">
+          <h3>课程设计原则</h3>
+          <ul>
+            <li>先建立母图，再逐章放大。</li>
+            <li>角色图、协议图、时序图、状态图分开。</li>
+            <li>HTML 负责“好读”，Markdown 负责“完整”。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="top-links"><a href="./README.md">Markdown 总入口</a><a href="./SOURCES.md">参考来源</a><a href="./PLAN.md">建设记录</a></div>
+    </section>
+
+    <section class="section" id="route">
+      <span class="eyebrow">建议阅读顺序</span>
+      <h2>学习路线：不要跳着背，顺着请求一路走</h2>
+      <div class="flow">
+        <div class="step">00 · 电脑刚连上网络：IP / Subnet / Gateway / DNS Server</div>
+        <div class="arrow">↓</div>
+        <div class="step">01 · URL → DNS → TCP → Route → ARP → NAT → TLS → HTTP</div>
+        <div class="arrow">↓</div>
+        <div class="step">02 · Process → Kernel → Driver → DMA → NIC</div>
+        <div class="arrow">↓</div>
+        <div class="step">03 · IP / CIDR / Route / ARP-NDP / ICMP / NAT</div>
+        <div class="arrow">↓</div>
+        <div class="step">04 · TCP / UDP / Seq-Ack / Retransmit / Window / Close</div>
+        <div class="arrow">↓</div>
+        <div class="step">05 · HTTP / HTTPS / TLS / Certificate / ECDHE</div>
+        <div class="arrow">↓</div>
+        <div class="step">06 · HTTP/2 / QUIC / HTTP/3 / WebSocket / RPC</div>
+        <div class="arrow">↓</div>
+        <div class="step">07 · CDN / WAF / LB / Gateway / RPC / Redis / MySQL</div>
+      </div>
+    </section>
+
+    <section class="section" id="chapters">
+      <span class="eyebrow">Visual Chapters</span>
+      <h2>章节导航</h2>
+      <div class="grid-2">
+        <div class="grid-card">
+          <span class="tag blue">00 · Foundation</span>
+          <h3>电脑刚连上网络时，先拿到了什么？</h3>
+          <p>DHCP、本机 IP、Subnet、Default Gateway、DNS Server。它是 URL 之前的网络前置条件。</p>
+          <div class="top-links"><a href="./00-network-bootstrap.md">阅读 Markdown</a></div>
+        </div>
+
+        <div class="grid-card">
+          <span class="tag green">01 · Mother Map</span>
+          <h3>从输入 URL 到网页返回</h3>
+          <p>整套课程的母图：把 DNS、Socket、TCP、Route、ARP/NDP、NAT/PAT、TLS、HTTP 串成一条完整请求。</p>
+          <div class="top-links"><a href="./01-url-to-webpage.html">打开视觉版</a><a href="./01-url-to-webpage.md">完整 Markdown</a></div>
+        </div>
+
+        <div class="grid-card">
+          <span class="tag blue">02 · OS Packet Path</span>
+          <h3>网络分层、封装与 OS 收发包</h3>
+          <p>从 send() 开始看数据如何经过 Socket、TCP/IP、Route、Neighbor、qdisc、Driver、Ring/DMA 和 NIC。</p>
+          <div class="top-links"><a href="./02-network-model-and-packets.html">打开视觉版</a><a href="./02-network-model-and-packets.md">完整 Markdown</a></div>
+        </div>
+
+        <div class="grid-card">
+          <span class="tag orange">03 · IP & Routing</span>
+          <h3>IP、CIDR、Route、ARP/NDP、ICMP、NAT</h3>
+          <p>理解一个 IP Packet 为什么能逐跳前进，以及 NAT/PAT 为什么会改变 endpoint 但不等于 Routing。</p>
+          <div class="top-links"><a href="./03-ip-routing-arp-nat.html">打开视觉版</a><a href="./03-ip-routing-arp-nat.md">完整 Markdown</a></div>
+        </div>
+
+        <div class="grid-card">
+          <span class="tag green">04 · Reliable Transport</span>
+          <h3>TCP / UDP：可靠字节流与状态机</h3>
+          <p>从 LISTEN/accept、三次握手、Seq/Ack、RTO/SACK、rwnd/cwnd 一路讲到 TIME_WAIT、RST 和真实故障。</p>
+          <div class="top-links"><a href="./04-tcp-udp.html">打开视觉版</a><a href="./04-tcp-udp.md">完整 Markdown</a></div>
+        </div>
+
+        <div class="grid-card">
+          <span class="tag purple">05 · Secure HTTP</span>
+          <h3>HTTP / HTTPS / TLS</h3>
+          <p>把 HTTP 业务语义、ECDHE、证书链、CertificateVerify、Finished、PSK/0-RTT 放进同一条安全握手。</p>
+          <div class="top-links"><a href="./05-http-https-tls.html">打开视觉版</a><a href="./05-http-https-tls.md">完整 Markdown</a></div>
+        </div>
+
+        <div class="grid-card">
+          <span class="tag orange">06 · Modern Protocols</span>
+          <h3>HTTP/2、HTTP/3、QUIC、WebSocket、RPC</h3>
+          <p>沿着 HTTP/1.1 → HTTP/2 → TCP HOL → QUIC → HTTP/3 的因果链，再把 WebSocket 与 RPC 放回正确层次。</p>
+          <div class="top-links"><a href="./06-modern-protocols.html">打开视觉版</a><a href="./06-modern-protocols.md">完整 Markdown</a></div>
+        </div>
+
+        <div class="grid-card">
+          <span class="tag red">07 · Production Topology</span>
+          <h3>真实后端网络拓扑</h3>
+          <p>把 DNS、CDN、WAF、L4/L7 LB、TLS Termination、Gateway、RPC、Redis/MySQL 放进真实生产请求链。</p>
+          <div class="top-links"><a href="./07-backend-network-topology.html">打开视觉版</a><a href="./07-backend-network-topology.md">完整 Markdown</a></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="principles">
+      <span class="eyebrow">阅读原则</span>
+      <h2>这套课程不靠“术语堆砌”，而靠四种图反复校准理解</h2>
+      <div class="grid-4">
+        <div class="grid-card"><span class="tag blue">参与者图</span><p>回答：Browser、Kernel、Router、Server 中，到底是谁在做这一步？</p></div>
+        <div class="grid-card"><span class="tag green">协议封装图</span><p>回答：HTTP / TLS / TCP / IP / L2 到底是什么上下层关系？</p></div>
+        <div class="grid-card"><span class="tag orange">时序图</span><p>回答：谁先发什么，谁收到后再发什么？</p></div>
+        <div class="grid-card"><span class="tag purple">状态 / 决策图</span><p>回答：为什么走这个分支？例如同网段 vs 默认网关、LISTEN vs ESTABLISHED。</p></div>
+      </div>
+      <div class="callout"><div class="icon">!</div><div><strong>一个图只回答一种问题</strong><div>“HTTP 在 TLS 上面”和“Browser 在 Kernel 上面”和“Laptop 经过 Router 到 Server”属于三种不同关系，不能用同一根箭头混着画。</div></div></div>
+    </section>
+
+    <section class="summary" id="master">
+      <h2>总母图：学完 01～07 后，你应该能独立解释这条链</h2>
+      <div class="codebox">Browser
+  ↓ URL
+DNS / A / AAAA
+  ↓
+Happy Eyeballs / connect
+  ↓
+TCP SYN
+  ↓
+Route
+  ↓
+ARP / NDP
+  ↓
+NIC
+  ↓
+Home Router
+  ↓
+NAT / PAT（典型 IPv4）
+  ↓
+Internet Routing
+  ↓
+Server / Edge
+  ↓
+TCP ESTABLISHED
+  ↓
+TLS 1.3
+  ↓
+HTTP / HTTP2 / HTTP3
+  ↓
+CDN / WAF / LB / Gateway
+  ↓
+Service Discovery / RPC
+  ↓
+Redis / MySQL
+  ↓
+Response 返回</div>
+      <p class="footer-note">目前课程的主任务是把 01～07 的内容持续打磨成更易阅读、更统一的视觉化教学材料，不再继续新增第 08 章实验章节。</p>
+    </section>
+  </main>
 </div>
-
-<h2>1 · 参与者泳道：不要把所有协议画在一根箭头上</h2>
-<div class="flow">
-  <div class="lane"><h3>Browser / App</h3>
-    <div class="step blue">URL Parser<br>scheme / host / port / path</div><div class="arrow">↓</div>
-    <div class="step blue">名称解析请求<br>A / AAAA candidates</div><div class="arrow">↓</div>
-    <div class="step blue">Address Sorting<br>Happy Eyeballs</div><div class="arrow">↓</div>
-    <div class="step blue">TLS 1.3</div><div class="arrow">↓</div>
-    <div class="step blue">HTTP</div>
-  </div>
-  <div class="lane"><h3>Client OS Kernel</h3>
-    <div class="step">多个错峰 connect()</div><div class="arrow">↓</div>
-    <div class="step">Socket + 临时端口</div><div class="arrow">↓</div>
-    <div class="step">TCP SYN → IP</div><div class="arrow">↓</div>
-    <div class="step">Route</div><div class="arrow">↓</div>
-    <div class="step">ARP / NDP → NIC</div>
-  </div>
-  <div class="lane"><h3>Home Router</h3>
-    <div class="step orange">收到 LAN Frame</div><div class="arrow">↓</div>
-    <div class="step orange">Routing / Conntrack</div><div class="arrow">↓</div>
-    <div class="step orange">NAT/PAT<br>典型 IPv4 家庭网</div><div class="arrow">↓</div>
-    <div class="step orange">WAN Forward</div>
-  </div>
-  <div class="lane"><h3>Internet</h3>
-    <div class="step purple">ISP</div><div class="arrow">↓</div>
-    <div class="step purple">AS / BGP<br>控制面路由信息</div><div class="arrow">↓</div>
-    <div class="step purple">Router FIB<br>逐跳 Forwarding</div>
-  </div>
-  <div class="lane"><h3>Server / Edge</h3>
-    <div class="step green">NIC → IP/TCP</div><div class="arrow">↓</div>
-    <div class="step green">443 LISTEN socket</div><div class="arrow">↓</div>
-    <div class="step green">Handshake → accept queue</div><div class="arrow">↓</div>
-    <div class="step green">Connected socket</div><div class="arrow">↓</div>
-    <div class="step green">TLS / HTTP Handler</div>
-  </div>
-</div>
-
-<h2>2 · Happy Eyeballs 不是“先选 IP，再 connect”</h2>
-<div class="timeline">
-  <div class="col">
-    <h3>Browser</h3>
-    <div class="msg blue">DNS 得到 IPv6-A / IPv4-A / ...</div>
-    <div class="msg blue">地址排序</div>
-    <div class="msg blue">connect(IPv6-A, 443)</div>
-    <div class="msg blue">短延迟后 connect(IPv4-A, 443)</div>
-    <div class="msg green">采用先成功的 winning socket</div>
-  </div>
-  <div class="mid"><div>→</div><div>→</div><div>→</div><div>→</div></div>
-  <div class="col">
-    <h3>OS / Network Stack</h3>
-    <div class="msg">建立多个短时重叠的连接尝试</div>
-    <div class="msg">每个尝试都有自己的 socket/TCP 状态</div>
-    <div class="msg">某个候选先完成</div>
-    <div class="msg">其余未完成尝试取消</div>
-  </div>
-</div>
-
-<h2>3 · IPv4 / IPv6 从邻居解析开始分叉</h2>
-<div class="branch">
-  <div class="card"><span class="tag">IPv4</span><b>Route → ARP → 可能 NAT/PAT</b><p>先由路由表决定下一跳，再用 ARP 找当前 IPv4 邻居的 MAC。典型家庭 IPv4 出口常经过 NAPT/PAT。</p></div>
-  <div class="card"><span class="tag">IPv6</span><b>Route → NDP → IPv6 Routing</b><p>IPv6 不使用 ARP，而使用 Neighbor Discovery 等机制。不能把 IPv4 的 NAT/ARP 教学链机械复制过去。</p></div>
-</div>
-
-<h2>4 · NAT/PAT 的正确位置</h2>
-<div class="timeline">
-  <div class="col">
-    <h3>Laptop 已经产生的包</h3>
-    <div class="msg">TCP: 53124 → 443, SYN=1</div>
-    <div class="msg">IP: 192.168.1.20 → 203.0.113.20</div>
-    <div class="msg">Route → Gateway</div>
-    <div class="msg">ARP → Router MAC</div>
-    <div class="msg">Ethernet Frame 发给 Router</div>
-  </div>
-  <div class="mid"><div>→</div><div>→</div><div>→</div><div>→</div></div>
-  <div class="col">
-    <h3>Home Router</h3>
-    <div class="msg orange">收到 LAN Frame</div>
-    <div class="msg orange">Conntrack / Routing</div>
-    <div class="msg orange">192.168.1.20:53124 ↔ 198.51.100.8:62001</div>
-    <div class="msg orange">重算必要头部信息并从 WAN 转发</div>
-  </div>
-</div>
-
-<h2>5 · TLS 与 CA 必须看成两个时间轴</h2>
-<div class="branch">
-  <div class="card">
-    <span class="tag">网站部署前</span>
-    <b>Site → CA → Certificate</b>
-    <p>CA 验证域名控制权并签发证书。服务器提前部署证书、Intermediate 证书和对应私钥；Root CA 信任锚由 OS/Browser 预置或管理。</p>
-  </div>
-  <div class="card">
-    <span class="tag">用户访问时</span>
-    <b>Browser ↔ Server</b>
-    <p>ClientHello / ServerHello / ECDHE / Certificate / CertificateVerify / Finished。浏览器在本地验链和验证服务器私钥持有证明，不是每次实时找 CA“批准”。</p>
-  </div>
-</div>
-
-<h2>6 · 这套课程最重要的边界</h2>
-<div class="grid">
-  <div class="card"><b>DNS ≠ Port</b><p>DNS 主要给地址记录；443 通常来自 HTTPS scheme 或 URL 显式端口。</p></div>
-  <div class="card"><b>Route → ARP/NDP</b><p>先决定下一跳，再解析当前链路邻居；ARP 不是永远查默认网关。</p></div>
-  <div class="card"><b>TCP SYN 已经存在</b><p>Route、ARP、NAT、互联网路由是在运输 SYN，而不是全部做完以后才“开始 TCP”。</p></div>
-  <div class="card"><b>NAT/PAT 属于 Router</b><p>它处理已经存在的 IP/transport 报文，并维护状态映射。</p></div>
-  <div class="card"><b>两类“公钥”不要混</b><p>ECDHE 临时 key share 用于协商秘密；证书身份公钥用于验证 CertificateVerify 等身份签名。</p></div>
-  <div class="card"><b>HTTPS ≠ 永远 TCP</b><p>HTTP/1.1/2 常见主线是 TCP+TLS；HTTP/3 是 QUIC/UDP。</p></div>
-</div>
-
-<h2>7 · 下一站：把镜头推进电脑内部</h2>
-<div class="card"><b>02 · 网络分层、封装与 OS 收发包</b><p>从 send() 开始，继续追踪 Socket → TCP → IP → Route → Neighbor → qdisc → Driver → Ring/DMA → NIC，并反向解释网卡收包如何最终回到 Browser。</p><div class="nav"><a href="./02-network-model-and-packets.html">打开 HTML 视觉版</a><a href="./02-network-model-and-packets.md">阅读完整 Markdown</a></div></div>
-<h2>8 · 再下一站：IP 包如何真正跨网络前进</h2>
-<div class="card"><b>03 · IP、CIDR、Route、ARP/NDP、ICMP、NAT</b><p>展开 CIDR、最长前缀匹配、同/异网段、ARP/NDP、BGP/FIB、ping/traceroute、SNAT/DNAT/PAT、Conntrack 与 CGNAT。</p><div class="nav"><a href="./03-ip-routing-arp-nat.html">打开 HTML 视觉版</a><a href="./03-ip-routing-arp-nat.md">阅读完整 Markdown</a></div></div>
-<h2>9 · 继续深入：TCP 为什么能可靠</h2>
-<div class="card"><b>04 · TCP / UDP：可靠传输与状态机</b><p>从 LISTEN/accept、三次握手、Seq/Ack、RTO/SACK、rwnd/cwnd 一路讲到 TIME_WAIT、CLOSE_WAIT、RST、Keepalive 与真实故障场景。</p><div class="nav"><a href="./04-tcp-udp.html">打开 HTML 视觉版</a><a href="./04-tcp-udp.md">阅读完整 Markdown</a></div></div>
-<h2>10 · 业务语义与安全：HTTP / HTTPS / TLS</h2>
-<div class="card"><b>05 · HTTP / HTTPS / TLS</b><p>把 HTTP Request/Response、Host/SNI/:authority、Cookie/Session、Cache，与 TLS 1.3 的 ECDHE、证书链、CertificateVerify、Finished、PSK/0-RTT 串成一条完整安全请求。</p><div class="nav"><a href="./05-http-https-tls.html">打开 HTML 视觉版</a><a href="./05-http-https-tls.md">阅读完整 Markdown</a></div></div>
-<h2>11 · 现代协议：从 HTTP/2 到 QUIC / RPC</h2>
-<div class="card"><b>06 · HTTP/2、HTTP/3、QUIC、WebSocket、RPC</b><p>沿着 HTTP/1.1 → HTTP/2 → TCP HOL → QUIC → HTTP/3 的因果链，再把 WebSocket、gRPC、Thrift、Deadline/Retry、Service Discovery 放回正确协议层。</p><div class="nav"><a href="./06-modern-protocols.html">打开 HTML 视觉版</a><a href="./06-modern-protocols.md">阅读完整 Markdown</a></div></div>
-<h2>12 · 真实后端：公网入口如何走到数据库</h2>
-<div class="card"><b>07 · 真实后端网络拓扑</b><p>把 DNS、CDN、WAF、L4/L7 LB、TLS Termination、Nginx/Envoy/API Gateway、RPC、Redis/MySQL 放回一条真实生产请求链，并补齐 Forwarded、PROXY Protocol、连接池、Deadline/Retry 和 Service Mesh。</p><div class="nav"><a href="./07-backend-network-topology.html">打开 HTML 视觉版</a><a href="./07-backend-network-topology.md">阅读完整 Markdown</a></div></div>
-<footer>README.md 是总入口；各章节 Markdown 是正文真源，HTML 用于视觉化复习与展示。</footer>
-</main>
 </body>
 </html>
