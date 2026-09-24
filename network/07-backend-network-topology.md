@@ -665,3 +665,203 @@ Backend
  ↓ Private Network
 Redis / MySQL
 ~~~
+
+
+---
+
+# 25. Backend 到 Redis / MySQL 仍然是网络请求
+
+~~~text
+Application
+ ↓
+DB / Redis Driver
+ ↓
+Socket
+ ↓
+TCP
+ ↓
+IP
+ ↓
+Private Network
+ ↓
+Database Server
+~~~
+
+所以数据库访问也可能遇到 connect timeout、read timeout、pool exhaustion、connection reset、DNS failure、route failure 和 packet loss。
+
+数据库问题不一定只是 SQL。
+
+---
+
+# 26. 数据库为什么也需要 Connection Pool？
+
+MySQL 建连可能包含 TCP、TLS、Authentication、Session Initialization。
+
+每条 SQL 都重建连接会非常浪费。
+
+~~~text
+App
+ ↓
+DB Connection Pool
+ ├─ Conn 1
+ ├─ Conn 2
+ └─ Conn 3
+ ↓
+MySQL
+~~~
+
+Redis Client 同样常维护长连接或连接池。
+
+---
+
+# 27. Connection Pool 为什么也会成为故障源？
+
+如果 Pool Size 固定，而每个请求持有连接时间变长，Pool 很快耗尽。
+
+~~~text
+Pool Exhausted
+ ↓
+Wait for Connection
+ ↓
+Pool Timeout
+~~~
+
+表面像数据库慢，根因可能是：
+
+- Pool 太小；
+- SQL 太慢；
+- Connection Leak；
+- 下游抖动；
+- 上游并发过高。
+
+---
+
+# 28. 一次业务 Request 可能有很多独立连接
+
+~~~text
+Browser → CDN            Connection A
+CDN → Gateway            Connection B
+Gateway → Feed Service   Connection C
+Feed → User Service      Connection D
+Feed → Recommend         Connection E
+Feed → Redis             Connection F
+Feed → MySQL             Connection G
+~~~
+
+所以：
+
+> **一次业务 Request 不等于一条端到端 TCP Connection。**
+
+每个 Proxy / Service 边界都可能结束上一条连接并新建下一条。
+
+---
+
+# 29. NAT、L4 LB、L7 Proxy 为什么都会改变对端？
+
+~~~text
+Client
+1.2.3.4:52001
+ ↓
+Home NAT
+198.51.100.8:62001
+ ↓
+CDN
+10.0.0.10:43000
+ ↓
+Gateway
+10.0.1.20:51000
+ ↓
+Backend
+~~~
+
+Backend 的 TCP Peer 可能只是 Gateway。
+
+本质差异：
+
+~~~text
+NAT
+→ 改地址 / 端口并维护映射
+
+L4 LB
+→ 按 Transport Connection 分发
+
+L7 Proxy
+→ 解析应用协议并按 Request 路由
+~~~
+
+---
+
+# 30. Health Check、Readiness、Liveness
+
+L4 Health Check 可能只是 TCP connect。
+
+L7 Health Check 可能是：
+
+~~~text
+GET /health
+→ 200
+~~~
+
+但 Port 能连不等于业务健康；健康页 200 也不一定代表所有依赖都健康。
+
+Readiness 回答：
+
+> 现在能不能接新流量？
+
+Liveness 回答：
+
+> 进程是否坏到应该重启？
+
+因此服务可以：
+
+~~~text
+Alive
+but
+Not Ready
+~~~
+
+---
+
+# 31. Deploy 为什么需要 Connection Draining？
+
+直接 Kill Backend：
+
+~~~text
+In-flight Request
+ ↓
+Reset / Error
+~~~
+
+更合理：
+
+~~~text
+LB 停止给它新流量
+ ↓
+Existing Requests drain
+ ↓
+等待完成
+ ↓
+关闭连接
+ ↓
+停止进程
+~~~
+
+这就是 Graceful Shutdown / Connection Draining。
+
+---
+
+# 32. mTLS 与 Service Mesh
+
+公网 TLS 常见是 Client 验证 Server。
+
+内部 Service-to-Service 可以：
+
+~~~text
+Service A
+⇄ mTLS ⇄
+Service B
+~~~
+
+双方都具有身份材料，从而同时获得 Encryption、Integrity、Server Identity 和 Client Identity。
+
+Service Mesh 常把 mTLS、Certificate Rotation、Discovery、Retry、Telemetry 等从业务代码中抽出去。
