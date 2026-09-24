@@ -46,6 +46,8 @@ flowchart LR
 | 12 | [11-系统设计案例](11-system-design-cases.md) | 企业 RAG、高并发 Chat、Coding Agent |
 | 13 | [12-论文与源码路线](12-papers-and-source.md) | 继续深挖论文和源码 |
 | 14 | [13-7天速成计划](13-seven-day-crash-plan.md) | 每天学什么、画什么、怎么自测 |
+| 15 | [14-术语字典](14-glossary.md) | HBM、Kernel、NCCL、Logits 等术语扫盲 |
+| 16 | [15-最小实验](15-mini-labs.md) | 用小代码验证 Softmax、Attention、KV Cache、RAG |
 
 ## 2. LLM 生命周期
 
