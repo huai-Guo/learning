@@ -115,6 +115,15 @@ Route
 
 # 4. Phase 2｜网络分层与 OS 收发包
 
+状态：**第一版已完成并落库**
+
+- [x] Markdown 正文：02-network-model-and-packets.md
+- [x] HTML 视觉版：02-network-model-and-packets.html
+- [x] 四类图严格分离：协议层次 / 封装 / 本机实现 / 设备路径
+- [x] 补齐 send → socket → TCP → IP → route → neighbor → qdisc → driver → ring/DMA → NIC
+- [x] 补齐接收方向、NAPI、RX Ring、socket receive buffer
+- [x] 补齐 MTU/MSS、IPv4 fragmentation、PMTU 与 GSO/TSO/GRO 的入门边界
+
 文件：02-network-model-and-packets.md
 
 核心问题：
