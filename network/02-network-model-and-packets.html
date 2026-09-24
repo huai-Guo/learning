@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>02 · 网络分层、封装与 OS 收发包</title>
+<style>
+:root{--bg:#f5f8fc;--card:#fff;--ink:#102647;--muted:#60728c;--line:#d9e4f0;--blue:#2d66ef;--b:#eef4ff;--g:#edf9f2;--o:#fff4e8;--p:#f4efff;--dark:#10182d}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#eef5fb,#fff);font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--ink)}main{max-width:1180px;margin:auto;padding:30px 22px 80px}
+.hero,.panel{background:#fff;border:1px solid var(--line);border-radius:26px;box-shadow:0 16px 48px rgba(35,66,110,.08)}.hero{padding:32px}h1{font-size:40px;margin:0 0 10px}h2{font-size:28px;margin:42px 0 16px}h3{font-size:18px;margin:0 0 10px}.sub{color:var(--muted);font-size:18px;line-height:1.75}.note{margin-top:18px;background:var(--dark);color:#fff;border-radius:15px;padding:15px 17px;line-height:1.65}
+.nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.nav a{color:#2159c9;text-decoration:none;border:1px solid #c5d5e8;padding:9px 12px;border-radius:11px;background:#fff;font-weight:600}
+.four,.grid3,.grid2{display:grid;gap:14px}.four{grid-template-columns:repeat(4,1fr)}.grid3{grid-template-columns:repeat(3,1fr)}.grid2{grid-template-columns:repeat(2,1fr)}
+.card{border:1px solid var(--line);background:#fff;border-radius:19px;padding:18px}.card p{color:var(--muted);line-height:1.65;margin:6px 0 0}.tag{display:inline-block;font-size:12px;border-radius:999px;padding:4px 8px;background:#eaf2ff;color:#235bc8;margin-bottom:8px}
+.stack{display:flex;flex-direction:column;gap:8px;max-width:650px;margin:0 auto}.layer{padding:15px 18px;border-radius:14px;border:1px solid var(--line);text-align:center;font-weight:700}.blue{background:var(--b)}.green{background:var(--g)}.orange{background:var(--o)}.purple{background:var(--p)}
+.arrow{text-align:center;color:var(--blue);font-weight:900}.swim{display:grid;grid-template-columns:1fr 1.35fr 1fr;gap:14px}.lane{border:1px solid var(--line);border-radius:20px;background:#fff;padding:16px}.step{padding:11px 12px;border-radius:12px;border:1px solid #dce5f0;margin:9px 0;font-size:14px;line-height:1.5}
+.packet{font-family:Consolas,monospace;background:#0e172a;color:#dbe7ff;border-radius:18px;padding:20px;line-height:1.7;overflow:auto}
+.metric{font-size:30px;font-weight:800}.small{font-size:13px;color:var(--muted)}
+footer{text-align:center;color:var(--muted);margin-top:40px;font-size:13px}
+@media(max-width:900px){.four,.grid3,.grid2,.swim{grid-template-columns:1fr}h1{font-size:31px}}
+</style>
+</head>
+<body><main>
+<section class="hero">
+<span class="tag">Phase 2</span>
+<h1>网络分层、封装与 OS 收发包</h1>
+<p class="sub">这一页只回答一件事：浏览器调用 send() 之后，字节如何从用户态穿过 Socket、TCP、IP、Route、Neighbor、驱动、DMA 和 NIC，最后真的离开电脑。</p>
+<div class="note">重要：协议层次、数据封装、本机实现路径、网络设备路径是四张不同的图。把它们混成一张竖线，是初学网络最常见的认知错误之一。</div>
+<div class="nav"><a href="./README.md">总目录</a><a href="./02-network-model-and-packets.md">完整 Markdown 正文</a><a href="./01-url-to-webpage.md">上一章</a><a href="./PLAN.md">计划</a></div>
+</section>
+
+<h2>1 · 四种图，回答四个问题</h2>
+<div class="four">
+<div class="card"><span class="tag">协议分层</span><h3>谁负责什么语义？</h3><p>HTTP / TCP / IP / Link 分别承担不同职责。</p></div>
+<div class="card"><span class="tag">封装</span><h3>线上字节长什么样？</h3><p>HTTP 数据被 TLS、TCP、IP、L2 一层层包住。</p></div>
+<div class="card"><span class="tag">本机实现</span><h3>代码在哪运行？</h3><p>User Process → Kernel → Driver → NIC。</p></div>
+<div class="card"><span class="tag">设备路径</span><h3>包经过谁？</h3><p>Laptop → Router → ISP → Server。</p></div>
+</div>
+
+<h2>2 · 封装不是“设备顺序”</h2>
+<div class="stack">
+<div class="layer blue">HTTP bytes</div><div class="arrow">↓ TLS 加密</div>
+<div class="layer purple">TLS Record</div><div class="arrow">↓ TCP</div>
+<div class="layer green">TCP Segment</div><div class="arrow">↓ IP</div>
+<div class="layer orange">IP Packet</div><div class="arrow">↓ Link</div>
+<div class="layer">L2 Frame → NIC</div>
+</div>
+
+<h2>3 · send() 之后的真实发送路径</h2>
+<div class="swim">
+<div class="lane"><h3>User Space</h3>
+<div class="step blue">Browser HTTP Stack</div><div class="arrow">↓</div>
+<div class="step blue">TLS Library<br>产生 TLS records</div><div class="arrow">↓</div>
+<div class="step blue">send(fd, data)</div>
+</div>
+<div class="lane"><h3>Kernel Space</h3>
+<div class="step">Socket / Send Buffer</div><div class="arrow">↓</div>
+<div class="step green">TCP<br>seq / ack / MSS / window</div><div class="arrow">↓</div>
+<div class="step orange">IP + Route Lookup</div><div class="arrow">↓</div>
+<div class="step orange">Netfilter / Policy</div><div class="arrow">↓</div>
+<div class="step orange">Neighbor<br>ARP / NDP</div><div class="arrow">↓</div>
+<div class="step">qdisc / TX queue</div><div class="arrow">↓</div>
+<div class="step">NIC Driver / TX Ring</div>
+</div>
+<div class="lane"><h3>Hardware</h3>
+<div class="step purple">DMA mapping</div><div class="arrow">↓</div>
+<div class="step purple">NIC</div><div class="arrow">↓</div>
+<div class="step purple">Wire / Radio</div>
+</div>
+</div>
+
+<h2>4 · send() 返回，不代表“对面已经收到”</h2>
+<div class="grid3">
+<div class="card"><b>应用层</b><p>send() 常常只表示内核接受了待发送数据。</p></div>
+<div class="card"><b>内核层</b><p>数据还可能排在 Socket buffer、拥塞控制、qdisc 或 Driver queue 中。</p></div>
+<div class="card"><b>网络层</b><p>真正送达还需要链路、路由、对端 TCP 接收与 ACK。</p></div>
+</div>
+
+<h2>5 · MTU 与 MSS</h2>
+<div class="grid3">
+<div class="card"><span class="small">Ethernet 常见示例</span><div class="metric">1500</div><p>MTU：常见以太网 L3 payload 上限示例。</p></div>
+<div class="card"><span class="small">IPv4 无 options</span><div class="metric">20 B</div><p>基础 IPv4 Header 示例。</p></div>
+<div class="card"><span class="small">TCP 无 options</span><div class="metric">≈1460</div><p>典型 MSS = 1500 - 20 - 20。不是固定常量。</p></div>
+</div>
+
+<h2>6 · Frame 里面到底套了什么</h2>
+<div class="packet">
+Ethernet / L2 Frame
+├── L2 Header
+└── IP Packet
+    ├── IP Header
+    └── TCP Segment
+        ├── TCP Header
+        └── TLS Record bytes
+            └── encrypted HTTP data
+</div>
+
+<h2>7 · Driver / Ring / DMA / NIC 是什么关系</h2>
+<div class="grid2">
+<div class="card"><span class="tag">TX</span><h3>发送</h3><p>Kernel packet → qdisc → Driver → TX descriptors → DMA → NIC → 物理介质。Descriptor Ring 可以理解成驱动交给网卡的一圈“任务单”。</p></div>
+<div class="card"><span class="tag">RX</span><h3>接收</h3><p>NIC → DMA 到 RX buffers → RX Ring → interrupt/NAPI → 协议栈 → Socket receive buffer → recv() → 应用。</p></div>
+</div>
+
+<h2>8 · 为什么高性能网络要 NAPI / Offload</h2>
+<div class="grid3">
+<div class="card"><b>NAPI</b><p>避免每个包都硬中断 CPU，使用“通知 + 批量轮询”处理高包速接收。</p></div>
+<div class="card"><b>GSO / TSO</b><p>发送方向把分段工作推迟到更低层或 NIC，降低 CPU 开销。</p></div>
+<div class="card"><b>GRO</b><p>接收方向把多个相邻小包合并成更大的逻辑对象供协议栈处理。</p></div>
+</div>
+
+<h2>9 · 收包时，内核怎么找到 Chrome？</h2>
+<div class="stack">
+<div class="layer purple">NIC 收到 Frame</div><div class="arrow">↓</div>
+<div class="layer">DMA / RX Ring / NAPI</div><div class="arrow">↓</div>
+<div class="layer orange">L2 → IP</div><div class="arrow">↓</div>
+<div class="layer green">TCP connection lookup</div><div class="arrow">↓</div>
+<div class="layer">Socket Receive Buffer</div><div class="arrow">↓ recv()</div>
+<div class="layer blue">Browser / TLS decrypt / HTTP parse</div>
+</div>
+
+<h2>10 · 记忆模型</h2>
+<div class="card">
+<p><b>应用</b>只把字节交给 Socket；<b>内核</b>负责 TCP/IP、路由和邻居；<b>驱动</b>负责把 packet 交给网卡；<b>NIC</b>借助 DMA 与硬件队列真正发送和接收。</p>
+</div>
+
+<footer>正文、实验、自测与准确性说明请看 02-network-model-and-packets.md</footer>
+</main></body></html>
