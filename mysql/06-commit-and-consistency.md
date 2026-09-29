@@ -1,4 +1,4 @@
-# 04｜从一次 COMMIT 到宕机恢复：redo、undo、binlog 与 Outbox
+# 06｜从一次 COMMIT 到宕机恢复：redo、undo、binlog 与 Outbox
 
 > 业务代码里一句 COMMIT 很简单。
 >
@@ -936,4 +936,4 @@ CDC
 
 继续：
 
-> [05｜规模上来以后：慢查询、热点、读写分离、分库分表](./05-scaling-and-operations.md)
+> [07｜规模上来以后：慢查询、热点、读写分离、分库分表](./07-scaling-and-operations.md)

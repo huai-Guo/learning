@@ -176,3 +176,64 @@ async aggregate
 换句话说：
 
 > 追求的是“真实工程约束”，不是“编一个大厂故事”。
+
+
+---
+
+## 7. 表设计与 Schema 设计补充校对
+
+### Foreign Key
+
+MySQL 8.4 InnoDB 支持 FOREIGN KEY，用于检查相关表之间的引用完整性。引用侧的外键列需要可用索引；如果没有合适索引，MySQL 会为约束建立需要的索引。
+
+官方：
+- [FOREIGN KEY Constraints](https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html)
+
+本课程不会把“必须使用 FK”或“高并发系统绝不用 FK”当成绝对规则，而是结合数据库所有权边界、迁移方式和团队完整性治理能力讨论。
+
+### JSON 与可索引字段
+
+MySQL 8.4 的 JSON 列不能直接作为普通 B-Tree 索引键。需要查询 JSON 内标量值时，可以通过生成列等机制建立索引访问路径。
+
+官方：
+- [The JSON Data Type](https://dev.mysql.com/doc/refman/8.4/en/json.html)
+- [Secondary Indexes and Generated Columns](https://dev.mysql.com/doc/refman/8.4/en/create-table-secondary-indexes.html)
+- [Optimizer Use of Generated Column Indexes](https://dev.mysql.com/doc/refman/8.4/en/generated-column-index-optimizations.html)
+
+这也是为什么本课程强调：经常参与 WHERE / JOIN / ORDER BY / UNIQUE / shard routing 的核心字段，应该认真考虑建成正式列，而不是全部藏在 JSON。
+
+### Primary Key 与二级索引
+
+InnoDB 每张表有 clustered index；显式 PRIMARY KEY 通常就是 clustered index。Secondary index 记录会携带 primary key，因此主键宽度会影响二级索引空间。
+
+官方：
+- [Clustered and Secondary Indexes](https://dev.mysql.com/doc/refman/8.4/en/innodb-index-types.html)
+
+这也是 00 章把主键设计放进 Schema Design，而不是把它仅仅当作“自增 ID 语法”的原因。
+
+
+---
+
+## 8. 索引设计与执行计划
+
+- [Optimization and Indexes](https://dev.mysql.com/doc/refman/8.4/en/optimization-indexes.html)
+- [Multiple-Column Indexes](https://dev.mysql.com/doc/refman/8.4/en/multiple-column-indexes.html)
+- [Index Condition Pushdown](https://dev.mysql.com/doc/refman/8.4/en/index-condition-pushdown-optimization.html)
+- [EXPLAIN Statement / EXPLAIN ANALYZE](https://dev.mysql.com/doc/refman/8.4/en/explain.html)
+- [Optimizer Statistics / Histograms](https://dev.mysql.com/doc/refman/8.4/en/optimizer-statistics.html)
+- [Hash Join Optimization](https://dev.mysql.com/doc/refman/8.4/en/hash-joins.html)
+
+本课程因此不采用“选择性高的一定放最左”“范围后所有列彻底失效”“有索引就一定使用”等过度简化口诀，而要求用 Query Pattern + 数据分布 + EXPLAIN / EXPLAIN ANALYZE 验证。
+
+---
+
+## 9. InnoDB 内存与磁盘结构
+
+- [InnoDB Storage Engine](https://dev.mysql.com/doc/refman/8.4/en/innodb-storage-engine.html)
+- [Buffer Pool](https://dev.mysql.com/doc/refman/8.4/en/innodb-buffer-pool.html)
+- [Change Buffer](https://dev.mysql.com/doc/refman/8.4/en/innodb-change-buffer.html)
+- [Adaptive Hash Index](https://dev.mysql.com/doc/refman/8.4/en/innodb-adaptive-hash.html)
+- [Doublewrite Buffer](https://dev.mysql.com/doc/refman/8.4/en/innodb-doublewrite-buffer.html)
+- [InnoDB Disk I/O](https://dev.mysql.com/doc/refman/8.4/en/innodb-disk-io.html)
+
+版本注意：MySQL 8.4 的 innodb_change_buffering 默认值为 none，Adaptive Hash Index 默认关闭。旧版本教程里的默认行为不能直接当成 MySQL 8.4 当前事实。
