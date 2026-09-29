@@ -14,6 +14,7 @@
 - [Pretraining / Post-training 图解](training.html)
 - [Inference / Serving 图解](inference-serving.html)
 - [RAG / Agent 图解](rag-agent.html)
+- [MoE / Router 动态图解](moe.html)
 
 这些页面使用浅色卡片、流程图、对比图、悬浮解释和章节导航；Markdown 章节继续作为更完整的文字参考。
 

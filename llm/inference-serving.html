@@ -6,7 +6,7 @@
 <div class="toplinks"><a href="index.html">总览</a><a href="training.html">上一章</a><a href="rag-agent.html">下一章</a></div></div></header>
 <main class="shell">
 <aside class="sidebar"><h3>本页导航</h3><p>从用户 Prompt 到 GPU，再到 token 流式返回，把整个线上推理链打通。</p>
-<nav class="sidenav"><a href="#overview">1. 总链路</a><a href="#prefill">2. Prefill / Decode</a><a href="#kv">3. KV Cache</a><a href="#gqa">4. GQA 与 KV</a><a href="#sampling">5. Sampling</a><a href="#prefix">6. Prefix Cache</a><a href="#paged">7. PagedAttention</a><a href="#batch">8. Continuous Batching</a><a href="#metrics">9. TTFT/TPOT</a><a href="#engines">10. vLLM/SGLang/TGI/llama.cpp</a><a href="#system">11. 高并发系统</a></nav></aside>
+<nav class="sidenav"><a href="#overview">1. 总链路</a><a href="#prefill">2. Prefill / Decode</a><a href="#kv">3. KV Cache</a><a href="#kv-live">3.5 动态 KV Cache</a><a href="#gqa">4. GQA 与 KV</a><a href="#sampling">5. Sampling</a><a href="#prefix">6. Prefix Cache</a><a href="#paged">7. PagedAttention</a><a href="#batch">8. Continuous Batching</a><a href="#metrics">9. TTFT/TPOT</a><a href="#engines">10. vLLM/SGLang/TGI/llama.cpp</a><a href="#system">11. 高并发系统</a></nav></aside>
 <div class="content">
 <section id="overview" class="hero reveal"><div class="eyebrow">模型会跑 ≠ 服务能上线</div><h1>LLM 推理与 Serving：从 Prompt 到 Token Stream</h1>
 <p class="lead">真正的线上问题不是“模型能不能生成”，而是：<strong>首 token 多快、每个 token 多快、能扛多少并发、显存会不会爆、GPU 能不能吃满。</strong></p>
@@ -27,6 +27,26 @@
 <div class="step"><strong>历史 K/V</strong><span>直接复用</span></div><div class="step"><strong>New Token</strong><span>只新算 Q/K/V</span></div><div class="step"><strong>Attention</strong><span>Q_new 仍要看历史 K</span></div></div></div>
 </div>
 <div class="callout warn">高频误区：KV Cache 不会把 Attention 变成“只看新 token”；它只是避免历史 token 的 K/V 投影反复重算。</div></section>
+
+
+<section id="kv-live" class="panel section reveal">
+  <div class="section-head"><h2>3.5 动起来看：KV Cache 是怎样一步步长大的</h2><p>点击“下一步”。重点看绿色旧块和蓝色新块的区别。</p></div>
+  <div class="visual-demo kv-demo" data-kv-demo data-tokens="中国,的,首都,是,北京">
+    <div class="demo-toolbar">
+      <button class="demo-btn" data-kv-next>下一步</button>
+      <button class="demo-btn" data-kv-reset>重置</button>
+      <span class="demo-note">绿色 = 历史 K/V 直接复用；蓝色 = 本步新计算。</span>
+    </div>
+    <div class="kv-slots" data-kv-slots></div>
+    <div class="kv-meter"><i data-kv-meter></i></div>
+    <div class="att-caption" data-kv-explain></div>
+    <div class="kv-eq">Decode step t：Q_new × K_cacheᵀ → attention weights → V_cache；只把 K_new / V_new 追加到 Cache。</div>
+  </div>
+  <div class="grid2" style="margin-top:14px">
+    <div class="card"><h3>省掉了什么</h3><p>省掉历史 token 再次通过 Wk / Wv 生成 K/V 的重复计算。</p></div>
+    <div class="card"><h3>没有省掉什么</h3><p>新 Query 仍然要和历史 K 做 Attention，所以序列越长，读取历史 KV 的成本仍然会上升。</p></div>
+  </div>
+</section>
 
 <section id="gqa" class="panel section reveal"><div class="section-head"><h2>4. 为什么 GQA 会直接影响并发能力</h2><p>KV Cache 的大小与 num_kv_heads 线性相关。</p></div>
 <div class="codebox">KV bytes ≈ 2 × layers × seq_len × num_kv_heads × head_dim × bytes × batch</div>

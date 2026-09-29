@@ -11,7 +11,7 @@
 <aside class="sidebar"><h3>本页导航</h3><p>先看结构，再看 QKV，最后看 Encoder/Decoder 和推理优化。</p>
 <nav class="sidenav">
 <a href="#overview">1. 总关系</a><a href="#block">2. Decoder Block</a><a href="#attention">3. Self-Attention</a>
-<a href="#qkv">4. Q/K/V</a><a href="#scale">5. √dₖ</a><a href="#heads">6. 多头</a>
+<a href="#attention-live">3.5 动态 Attention</a><a href="#qkv">4. Q/K/V</a><a href="#scale">5. √dₖ</a><a href="#heads">6. 多头</a>
 <a href="#encdec">7. Encoder vs Decoder</a><a href="#bertgpt">8. BERT vs GPT</a><a href="#position">9. 位置编码</a>
 <a href="#gqa">10. MHA/MQA/GQA</a><a href="#flash">11. FlashAttention</a><a href="#lost">12. Lost in the Middle</a>
 </nav></aside>
@@ -75,6 +75,37 @@
       </div>
     </div>
   </div>
+</section>
+
+
+<section id="attention-live" class="panel section reveal">
+  <div class="section-head"><h2>3.5 动起来看：Query 改变后，Attention 权重怎么变</h2><p>点击不同 token。你会看到：同一组 Key，在不同 Query 下会得到完全不同的权重。</p></div>
+  <div class="visual-demo" data-attention-demo>
+    <div class="demo-toolbar">
+      <strong>选择当前 Query：</strong>
+      <button class="att-token" data-att-token data-weights="0.52,0.09,0.21,0.06,0.12">小明</button>
+      <button class="att-token" data-att-token data-weights="0.12,0.58,0.08,0.04,0.18">苹果</button>
+      <button class="att-token" data-att-token data-weights="0.18,0.07,0.55,0.06,0.14">小红</button>
+      <button class="att-token active" data-att-token data-weights="0.12,0.05,0.68,0.04,0.11">她</button>
+      <button class="att-token" data-att-token data-weights="0.08,0.15,0.24,0.09,0.44">饿了</button>
+    </div>
+    <div class="attention-demo-grid">
+      <div class="card white">
+        <h3>Query / Key 的直觉</h3>
+        <p>你点中的词作为 <strong>Query</strong>。它会拿自己的 Q 和所有 token 的 K 做匹配，得到一组分数。</p>
+        <div class="callout info">这里的权重是教学示意，不是某个真实模型的实际 Attention Head 数值。</div>
+      </div>
+      <div>
+        <div class="att-score" data-att-row><span>小明</span><div class="track"><div class="fill"></div></div><b data-value>0</b></div>
+        <div class="att-score" data-att-row><span>苹果</span><div class="track"><div class="fill"></div></div><b data-value>0</b></div>
+        <div class="att-score" data-att-row><span>小红</span><div class="track"><div class="fill"></div></div><b data-value>0</b></div>
+        <div class="att-score" data-att-row><span>她</span><div class="track"><div class="fill"></div></div><b data-value>0</b></div>
+        <div class="att-score" data-att-row><span>饿了</span><div class="track"><div class="fill"></div></div><b data-value>0</b></div>
+        <div class="att-caption" data-att-caption></div>
+      </div>
+    </div>
+  </div>
+  <div class="callout warn"><strong>你应该观察到：</strong>Attention 不是给每个词一个固定“重要性分数”；权重取决于当前 Query，所以它是动态的上下文路由。</div>
 </section>
 
 <section id="qkv" class="panel section reveal">

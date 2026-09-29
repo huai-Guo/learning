@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MoE 图解</title><link rel="stylesheet" href="assets/site.css"></head>
+<body>
+<header class="topbar"><div class="topbar-inner">
+  <div class="brand"><div class="brand-badge">MoE</div><div>Mixture of Experts 图解</div></div>
+  <div class="toplinks"><a href="index.html">总览</a><a href="rag-agent.html">RAG / Agent</a><a href="07-moe-modern-architecture.md">文字版</a></div>
+</div></header>
+
+<main class="shell">
+<aside class="sidebar">
+  <h3>本页导航</h3><p>重点理解三个问题：为什么总参数能很大、为什么每 token 只激活少量参数、为什么 MoE 难部署。</p>
+  <nav class="sidenav">
+    <a href="#why">1. 为什么需要 MoE</a>
+    <a href="#router">2. Router 动画</a>
+    <a href="#topk">3. Top-K Experts</a>
+    <a href="#balance">4. Load Balance</a>
+    <a href="#parallel">5. Expert Parallel</a>
+    <a href="#compare">6. Dense vs MoE</a>
+    <a href="#interview">7. 面试回答</a>
+  </nav>
+</aside>
+
+<div class="content">
+<section id="why" class="hero reveal">
+  <div class="eyebrow">容量与计算量的折中</div>
+  <h1>MoE：让模型“参数很多”，但每个 Token 不必经过所有参数</h1>
+  <p class="lead">Dense 模型里，每个 token 都会经过同一套 FFN；MoE 把 FFN 拆成多个 <strong>Experts</strong>，再由 <strong>Router</strong> 为每个 token 选择少量专家。于是 <strong>Total Parameters</strong> 可以很大，但 <strong>Activated Parameters</strong> 相对较小。</p>
+  <div class="kpis">
+    <div class="kpi"><strong>Dense</strong><span>每个 token 经过同一套 FFN</span></div>
+    <div class="kpi"><strong>Router</strong><span>给 Experts 打 routing score</span></div>
+    <div class="kpi"><strong>Top-K</strong><span>每个 token 只选少量 Experts</span></div>
+    <div class="kpi"><strong>难点</strong><span>负载均衡 + All-to-All 通信</span></div>
+  </div>
+</section>
+
+<section class="panel section reveal">
+  <div class="section-head"><h2>1. Dense 和 MoE 的结构差在哪</h2><p>MoE 通常不是把整个 Transformer 都变成专家，而是重点把 FFN 子层稀疏化。</p></div>
+  <div class="compare">
+    <div class="side">
+      <h3>Dense FFN</h3>
+      <ul><li>Token A → 同一套 FFN</li><li>Token B → 同一套 FFN</li><li>Token C → 同一套 FFN</li><li>所有 token 使用相同参数路径</li></ul>
+    </div>
+    <div class="side">
+      <h3>MoE FFN</h3>
+      <ul><li>Token A → Router → Expert 1 + 3</li><li>Token B → Router → Expert 2 + 4</li><li>Token C → Router → Expert 1 + 4</li><li>不同 token 走不同参数子集</li></ul>
+    </div>
+  </div>
+</section>
+
+<section id="router" class="panel section reveal">
+  <div class="section-head"><h2>2. 动起来看：Router 怎样把 Token 分给 Experts</h2><p>点击左边不同 token，或点“自动播放”。每个 token 选择两个专家只是教学示意。</p></div>
+  <div class="visual-demo" data-moe-demo>
+    <div class="demo-toolbar">
+      <button class="demo-btn" data-moe-play>自动播放</button>
+      <span class="demo-note">观察：不同 token 会走不同 Expert，某些 Expert 可能逐渐变热。</span>
+    </div>
+
+    <div class="moe-stage">
+      <div class="moe-tokens">
+        <div class="moe-token" data-moe-token data-route="0,2">Python</div>
+        <div class="moe-token" data-moe-token data-route="1,3">北京</div>
+        <div class="moe-token" data-moe-token data-route="0,3">矩阵</div>
+        <div class="moe-token" data-moe-token data-route="2,3">HTTP</div>
+        <div class="moe-token" data-moe-token data-route="0,2">函数</div>
+      </div>
+
+      <div class="router">Router<br><small>Top-2</small></div>
+
+      <div class="experts">
+        <div class="expert" data-expert data-name="Expert 0">Expert 0</div>
+        <div class="expert" data-expert data-name="Expert 1">Expert 1</div>
+        <div class="expert" data-expert data-name="Expert 2">Expert 2</div>
+        <div class="expert" data-expert data-name="Expert 3">Expert 3</div>
+      </div>
+    </div>
+
+    <div class="att-caption" data-moe-caption></div>
+
+    <div class="moe-status">
+      <div class="load-card"><b>Expert 0 累积负载</b><div class="loadbar"><i data-load></i></div></div>
+      <div class="load-card"><b>Expert 1 累积负载</b><div class="loadbar"><i data-load></i></div></div>
+      <div class="load-card"><b>Expert 2 累积负载</b><div class="loadbar"><i data-load></i></div></div>
+      <div class="load-card"><b>Expert 3 累积负载</b><div class="loadbar"><i data-load></i></div></div>
+    </div>
+  </div>
+
+  <div class="callout warn">不要把 Expert 简单理解成“数学专家 / 英语专家”这种人工标签。训练中可能产生专业化，但真实 routing 表征通常更复杂。</div>
+</section>
+
+<section id="topk" class="panel section reveal">
+  <div class="section-head"><h2>3. Top-K 到底意味着什么</h2><p>Router 会先给每个 Expert 一个 score，再只保留最高的 K 个。</p></div>
+  <div class="flow horizontal" style="--cols:5">
+    <div class="step"><strong>Hidden State h</strong><span>当前 token 表示</span></div>
+    <div class="step"><strong>Router Linear</strong><span>得到 expert logits</span></div>
+    <div class="step"><strong>Routing Scores</strong><span>E0=.62 E1=.08 E2=.26...</span></div>
+    <div class="step"><strong>Top-K</strong><span>例如选 E0 + E2</span></div>
+    <div class="step"><strong>Weighted Combine</strong><span>按 routing weight 合并输出</span></div>
+  </div>
+  <div class="callout info"><strong>核心收益：</strong>总模型容量可以继续增加，但每个 token 的实际 FFN 计算只经过少量 Experts。</div>
+</section>
+
+<section id="balance" class="panel section reveal">
+  <div class="section-head"><h2>4. 为什么 Load Balance 是 MoE 的核心难题</h2><p>如果 Router 太偏爱某几个 Expert，理论上的稀疏优势会被系统瓶颈吃掉。</p></div>
+  <div class="grid3">
+    <div class="card"><h3>热点 Expert</h3><p>某个 Expert 收到过多 token，所在 GPU 变成 straggler。</p></div>
+    <div class="card"><h3>冷门 Expert</h3><p>大量参数很少被训练或使用，容量被浪费。</p></div>
+    <div class="card"><h3>通信拥堵</h3><p>Token 跨卡 dispatch / combine 变得不均匀，All-to-All 更难优化。</p></div>
+  </div>
+  <div class="pills"><span class="pill">Auxiliary Balance Loss</span><span class="pill">Capacity</span><span class="pill">Routing Bias</span><span class="pill">Dynamic Balance</span></div>
+</section>
+
+<section id="parallel" class="panel section reveal">
+  <div class="section-head"><h2>5. Expert Parallel：为什么 MoE 特别依赖集群网络</h2><p>Experts 往往分散在不同 GPU，Router 选中谁，就要把 token 发到谁那里。</p></div>
+  <div class="flow horizontal" style="--cols:5">
+    <div class="step"><strong>GPU 0</strong><span>Tokens A/B/C</span></div>
+    <div class="step"><strong>Dispatch</strong><span>按 Router 结果重排 token</span></div>
+    <div class="step"><strong>All-to-All</strong><span>跨 GPU 发送</span></div>
+    <div class="step"><strong>Expert Compute</strong><span>各 GPU 上 Experts 计算</span></div>
+    <div class="step"><strong>Combine</strong><span>再把结果送回原 token 顺序</span></div>
+  </div>
+  <div class="callout bad">所以 MoE 的瓶颈不只是矩阵乘法。<strong>网络带宽、通信延迟、Expert Placement、负载均衡</strong>都可能决定最终吞吐。</div>
+</section>
+
+<section id="compare" class="panel section reveal">
+  <div class="section-head"><h2>6. Dense vs MoE：什么时候谁更合适</h2><p>MoE 不是无条件优于 Dense。</p></div>
+  <table>
+    <thead><tr><th>维度</th><th>Dense</th><th>MoE</th></tr></thead>
+    <tbody>
+      <tr><td>参数使用</td><td>每 token 使用同一套主要参数</td><td>每 token 只激活少量 Experts</td></tr>
+      <tr><td>工程复杂度</td><td>较低</td><td>更高，需要 Router/EP/All-to-All</td></tr>
+      <tr><td>容量扩展</td><td>参数增大通常伴随计算增大</td><td>可以扩大总参数而控制激活计算</td></tr>
+      <tr><td>单机部署</td><td>通常更友好</td><td>大 MoE 更依赖集群与框架支持</td></tr>
+      <tr><td>主要风险</td><td>计算/显存直接变大</td><td>负载不均、通信、复杂调度</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="interview" class="panel section reveal">
+  <div class="section-head"><h2>7. 面试怎么回答 MoE</h2><p>30 秒版本先讲“为什么”，再讲“代价”。</p></div>
+  <div class="grid2">
+    <div class="card white"><h3>30 秒版本</h3><p>MoE 把 Transformer 的 FFN 换成多个 Experts，由 Router 为每个 token 选择少量 Top-K Experts。这样总参数量可以很大，但每 token 只激活一小部分参数，从而扩大模型容量而控制计算量。</p></div>
+    <div class="card white"><h3>继续追问</h3><p>真正工程难点是 Router 负载均衡、Expert Parallel、All-to-All 通信，以及不同 GPU 上专家的放置和高效 kernel。</p></div>
+  </div>
+  <details style="margin-top:12px"><summary>追问：MoE 参数很大，为什么推理不一定同比更慢？</summary><p>因为单个 token 只经过 Router 选中的 Top-K Experts，而不是全部 Experts。需要区分 Total Parameters 和 Activated Parameters。</p></details>
+  <details style="margin-top:10px"><summary>追问：MoE 为什么可能反而很难跑快？</summary><p>虽然算术计算稀疏了，但 token 必须跨 GPU 路由；如果负载不均或网络不够快，All-to-All 和 straggler 会成为瓶颈。</p></details>
+</section>
+
+<footer>MoE 不是“更多专家”这么简单：它是容量、稀疏计算和分布式通信之间的系统级折中。</footer>
+</div>
+</main>
+<script src="assets/site.js"></script>
+</body>
+</html>
